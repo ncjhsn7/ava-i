@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pypdf
+langchain-text-splitters
+chromadb
+anthropic
+python-multipart
+python-dotenv
