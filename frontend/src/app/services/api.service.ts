@@ -2,22 +2,36 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 
+export interface Cadeira {
+  id: number;
+  nome: string;
+}
+
 export interface Material {
   id: number;
+  cadeira_id: number;
   titulo: string;
-  cenario: string;
   status: string;
 }
 
 export interface Questao {
   id: number;
   ordem: number;
+  topico: string;
   pergunta: string;
   opcoes: string[];
   correta: number;
   justificativa: string;
   chunk_fonte: string;
   status: string;
+}
+
+export interface Pergunta {
+  pergunta: string;
+  opcoes: string[];
+  correta: number;
+  justificativa: string;
+  fonte: string;
 }
 
 export interface TelemetriaItem {
@@ -27,11 +41,9 @@ export interface TelemetriaItem {
   modo: string;
 }
 
-export interface DadosDashboard {
-  kpis: { sessoes: number; focus_medio: number; eventos_controle: number; eventos_intervencao: number };
-  engajamento: { minutos: number[]; controle: (number | null)[]; intervencao: (number | null)[] };
-  acertos_por_questao: { questao: string; acerto: number | null }[];
-  pontos: { focus: number; acerto: number }[];
+export interface Painel {
+  kpis: { sessoes: number; respostas: number; acerto_medio: number; foco_medio: number | null };
+  acertos_por_topico: { topico: string; acerto: number | null; respostas: number }[];
 }
 
 @Injectable({ providedIn: 'root' })
@@ -39,34 +51,49 @@ export class ApiService {
   private http = inject(HttpClient);
   private base = environment.apiUrl;
 
-  criarMaterial(titulo: string, cenario: string, arquivo: File) {
+  listarCadeiras() {
+    return this.http.get<Cadeira[]>(`${this.base}/cadeiras`);
+  }
+
+  criarCadeira(nome: string) {
+    return this.http.post<Cadeira>(`${this.base}/cadeiras`, { nome });
+  }
+
+  removerCadeira(cadeiraId: number) {
+    return this.http.delete(`${this.base}/cadeiras/${cadeiraId}`);
+  }
+
+  listarMateriais(cadeiraId: number) {
+    return this.http.get<Material[]>(`${this.base}/cadeiras/${cadeiraId}/materiais`);
+  }
+
+  criarMaterial(cadeiraId: number, titulo: string, arquivo: File) {
     const form = new FormData();
     form.append('titulo', titulo);
-    form.append('cenario', cenario);
     form.append('arquivo', arquivo);
-    return this.http.post<Material>(`${this.base}/materiais`, form);
+    return this.http.post<Material>(`${this.base}/cadeiras/${cadeiraId}/materiais`, form);
   }
 
-  listarMateriais(status?: string) {
-    const sufixo = status ? `?status=${status}` : '';
-    return this.http.get<Material[]>(`${this.base}/materiais${sufixo}`);
+  removerMaterial(materialId: number) {
+    return this.http.delete(`${this.base}/materiais/${materialId}`);
   }
 
-  listarQuestoes(materialId: number, status?: string) {
-    const sufixo = status ? `?status=${status}` : '';
-    return this.http.get<Questao[]>(`${this.base}/materiais/${materialId}/questoes${sufixo}`);
+  previewMaterial(materialId: number) {
+    return this.http.post<Pergunta>(`${this.base}/materiais/${materialId}/preview`, {});
   }
 
-  atualizarQuestao(id: number, dados: Partial<Questao>) {
-    return this.http.patch<Questao>(`${this.base}/questoes/${id}`, dados);
+  iniciarSessao(cadeiraId: number, modo: string, materialIds: number[]) {
+    return this.http.post<{ sessao_id: number }>(`${this.base}/sessoes`, { cadeira_id: cadeiraId, modo, material_ids: materialIds });
   }
 
-  publicar(materialId: number) {
-    return this.http.post<Material>(`${this.base}/materiais/${materialId}/publicar`, {});
+  proximaQuestao(sessaoId: number, materialIds: number[]) {
+    return this.http.post<Questao>(`${this.base}/sessoes/${sessaoId}/questao`, { material_ids: materialIds });
   }
 
-  iniciarSessao(materialId: number, condicao: string, modo: string) {
-    return this.http.post<{ id: number }>(`${this.base}/sessoes`, { material_id: materialId, condicao, modo });
+  gerarEstudo(cadeiraId: number, materialIds: number[], nivel: string, objetivo: string, tempo: string) {
+    return this.http.post<{ texto: string }>(`${this.base}/cadeiras/${cadeiraId}/estudo`, {
+      material_ids: materialIds, nivel, objetivo, tempo
+    });
   }
 
   enviarTelemetria(sessaoId: number, itens: TelemetriaItem[]) {
@@ -82,7 +109,7 @@ export class ApiService {
     return this.http.post(`${this.base}/sessoes/${sessaoId}/encerrar`, {});
   }
 
-  dashboard(materialId: number) {
-    return this.http.get<DadosDashboard>(`${this.base}/dashboard/${materialId}`);
+  painel(cadeiraId: number) {
+    return this.http.get<Painel>(`${this.base}/cadeiras/${cadeiraId}/dashboard`);
   }
 }

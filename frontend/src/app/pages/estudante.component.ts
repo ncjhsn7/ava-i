@@ -1,171 +1,190 @@
 import { Component, OnDestroy, OnInit, inject, signal, computed, ElementRef, ViewChild } from '@angular/core';
-import { ApiService, Material, Questao, TelemetriaItem } from '../services/api.service';
+import { ApiService, Cadeira, Material, Questao, TelemetriaItem } from '../services/api.service';
 import { VisionService } from '../services/vision.service';
 import { YoloService } from '../services/yolo.service';
-
-interface Bloco {
-  trecho: string;
-  questao: Questao;
-  respondida: boolean;
-  escolhida: number | null;
-  acertou: boolean | null;
-  justificativa: string;
-}
 
 @Component({
   selector: 'app-estudante',
   template: `
     <div class="view">
       <div class="cabecalho">
-        <div class="selo">Módulo 2 · Sessão de estudo inteligente</div>
-        <h2>{{ material()?.titulo || 'Sessão de estudo' }}</h2>
-        <p>O monitoramento roda inteiramente neste navegador; apenas métricas agregadas são enviadas ao servidor.</p>
+        <div class="selo">Questionário</div>
+        <h2>{{ fase() === 'selecao' && !cadeiraId() ? 'Escolha a cadeira' : (cadeiraNome() || 'Estudo') }}</h2>
+        <p>Escolha a cadeira, marque os PDFs que quer praticar e responda a um fluxo contínuo de questões geradas a partir deles.</p>
       </div>
 
       @if (fase() === 'selecao') {
-        <div class="cartao">
-          @if (materiais().length === 0) {
-            <p>Nenhum material publicado ainda. Peça ao docente para preparar e publicar um material.</p>
+        @if (!cadeiraId()) {
+          @if (cadeiras().length === 0) {
+            <p class="vazio">Nenhuma cadeira disponível. Peça ao professor para criar uma e enviar os PDFs.</p>
           } @else {
-            <label>Material
-              <select [value]="materialId()" (change)="materialId.set(+$any($event.target).value)">
-                @for (m of materiais(); track m.id) {
-                  <option [value]="m.id">{{ m.titulo }}</option>
-                }
-              </select>
-            </label>
-            <label>Condição experimental
-              <select [value]="condicao()" (change)="condicao.set($any($event.target).value)">
-                <option value="intervencao">Intervenção — leitura com checkpoints</option>
-                <option value="controle">Controle — leitura sem questões</option>
-              </select>
-            </label>
-            <button class="btn btn-verde" (click)="comecar()">Iniciar sessão</button>
+            <div class="grade">
+              @for (c of cadeiras(); track c.id) {
+                <button class="curso" (click)="abrirCadeira(c.id)">
+                  <div class="banner" [style.background]="corCadeira(c.id)"><span>{{ inicial(c.nome) }}</span></div>
+                  <div class="curso-nome">{{ c.nome }}</div>
+                </button>
+              }
+            </div>
           }
+        } @else {
+          <button class="voltar" (click)="abrirCadeira(0)">← Todas as cadeiras</button>
+          @if (materiais().length === 0) {
+            <p class="vazio">Esta cadeira ainda não tem PDFs. Peça ao professor para enviar.</p>
+          } @else {
+            <div class="barra-sel">
+              <span>{{ selMateriais().size }} de {{ materiais().length }} PDFs</span>
+              <button class="btn-link" (click)="alternarTodos()">{{ selMateriais().size === materiais().length ? 'Limpar' : 'Selecionar todos' }}</button>
+            </div>
+            @for (m of materiais(); track m.id) {
+              <div class="pdf" [class.marcado]="selMateriais().has(m.id)" (click)="alternar(m.id)">
+                <span class="check">{{ selMateriais().has(m.id) ? '✓' : '' }}</span>
+                <span class="pdf-nome">{{ m.titulo }}</span>
+              </div>
+            }
+            <div class="acoes-estudo">
+              <button class="btn btn-accent" (click)="comecar()" [disabled]="carregando() || selMateriais().size === 0">
+                {{ carregando() ? 'Preparando…' : 'Questionário' }}
+              </button>
+              <button class="btn btn-ghost" (click)="fase.set('prefs')" [disabled]="selMateriais().size === 0">
+                Material de estudo
+              </button>
+            </div>
+            @if (erro()) { <p class="erro">{{ erro() }}</p> }
+          }
+        }
+      }
+
+      @if (fase() === 'prefs') {
+        <button class="voltar" (click)="fase.set('selecao')">← PDFs</button>
+        <div class="cartao prefs">
+          <p class="prefs-intro">Ajuste o material ao seu momento — as respostas guiam a explicação gerada.</p>
+          <label>Seu nível na matéria
+            <select [value]="nivel()" (change)="nivel.set($any($event.target).value)">
+              <option value="Iniciante">Iniciante</option>
+              <option value="Intermediário">Intermediário</option>
+              <option value="Avançado">Avançado</option>
+            </select>
+          </label>
+          <label>Objetivo
+            <select [value]="objetivo()" (change)="objetivo.set($any($event.target).value)">
+              <option value="Primeiro contato">Primeiro contato com o assunto</option>
+              <option value="Revisão para prova">Revisão para prova</option>
+              <option value="Aprofundar">Aprofundar o conhecimento</option>
+            </select>
+          </label>
+          <label>Tempo disponível
+            <select [value]="tempo()" (change)="tempo.set($any($event.target).value)">
+              <option value="5 min">~5 min (bem resumido)</option>
+              <option value="15 min">~15 min</option>
+              <option value="30+ min">30+ min (completo)</option>
+            </select>
+          </label>
+          <button class="btn btn-accent" (click)="gerarEstudo()" [disabled]="gerandoEstudo()">
+            {{ gerandoEstudo() ? 'Gerando material…' : 'Gerar material de estudo' }}
+          </button>
+          @if (erro()) { <p class="erro">{{ erro() }}</p> }
         </div>
       }
 
-      @if (fase() === 'sessao' || fase() === 'fim') {
-        <div class="sessao">
-          <article class="leitura" [class.esmaecida]="focoExibido() < 45">
-            @for (bloco of blocos(); track bloco.questao.id; let i = $index) {
-              @if (i <= blocoAtual()) {
-                <section>
-                  <h3>Trecho {{ i + 1 }}</h3>
-                  <p class="texto">{{ bloco.trecho }}</p>
-                  @if (condicao() === 'intervencao' && i === blocoAtual() && fase() === 'sessao') {
-                    <div class="checkpoint">
-                      <div class="cp-selo">Ponto de verificação</div>
-                      <h4>{{ bloco.questao.pergunta }}</h4>
-                      @for (opcao of bloco.questao.opcoes; track $index) {
-                        <button class="cp-opt"
-                          [class.acerto]="bloco.respondida && $index === bloco.questao.correta"
-                          [class.erro]="bloco.respondida && bloco.escolhida === $index && !bloco.acertou"
-                          [disabled]="bloco.respondida"
-                          (click)="responder(bloco, $index)">{{ letra($index) }}) {{ opcao }}</button>
-                      }
-                      @if (bloco.respondida) {
-                        <p class="feedback" [class.ok]="bloco.acertou" [class.nok]="!bloco.acertou">
-                          {{ bloco.acertou ? 'Correto. ' : 'Não foi dessa vez. ' }}{{ bloco.justificativa }}
-                        </p>
-                      }
-                    </div>
-                  }
-                </section>
-              }
-            }
-            @if (condicao() === 'controle' && fase() === 'sessao') {
-              <button class="btn btn-verde" (click)="encerrar()">Concluir leitura</button>
-            }
-            @if (fase() === 'fim') {
-              <div class="fim">
-                <h3>Sessão concluída</h3>
-                <p>Telemetria agregada enviada ao backend. Nenhum quadro de vídeo saiu desta máquina.</p>
-              </div>
-            }
-          </article>
+      @if (fase() === 'estudo') {
+        <button class="voltar" (click)="fase.set('prefs')">← Preferências</button>
+        <div class="cartao material">
+          <pre class="texto-estudo">{{ materialTexto() }}</pre>
+        </div>
+      }
 
-          <aside class="painel">
-            <div class="instrumento">
-              <div class="rotulo">Monitoramento local
-                <span class="modo" [class.cam]="vision.ativo()" [class.degradado]="vision.erro()">
-                  {{ vision.ativo() ? (vision.calibrado() ? 'câmera real' : 'calibrando…') : (vision.erro() ? 'degradado' : 'simulado') }}
-                </span>
-              </div>
-              <div class="estado" [class.atento]="focoExibido() >= 60" [class.disperso]="focoExibido() < 60">
-                ● {{ focoExibido() >= 60 ? 'ATENTO' : 'DISPERSO' }}
-              </div>
-              <div class="medidor">
-                <svg width="130" height="130">
-                  <circle class="fundo" cx="65" cy="65" r="55"></circle>
-                  <circle class="arco" cx="65" cy="65" r="55"
-                    [attr.stroke]="focoExibido() >= 60 ? '#3ddc97' : focoExibido() >= 40 ? '#f0b35c' : '#e96a6a'"
-                    stroke-dasharray="345.6"
-                    [attr.stroke-dashoffset]="345.6 * (1 - focoExibido() / 100)"></circle>
-                </svg>
-                <div class="valor"><b>{{ focoExibido() }}</b><span>focusScore</span></div>
-              </div>
-              <div class="linha"><span>EAR</span><b>{{ vision.earAtual() ?? '—' }}</b></div>
-              <div class="linha"><span>Eventos de celular</span><b>{{ yolo.eventos() }}</b></div>
-              <div class="linha"><span>Detector YOLO</span><b>{{ yolo.disponivel() ? (yolo.celularVisivel() ? 'celular!' : 'ativo') : 'inativo' }}</b></div>
-              <div class="linha"><span>Tempo</span><b>{{ relogio() }}</b></div>
-              <button class="btn btn-mini acao" (click)="ativarCamera()" [disabled]="vision.ativo()">Ativar câmera (MediaPipe)</button>
-              <button class="btn btn-mini acao" (click)="ativarYolo()" [disabled]="!vision.ativo() || yolo.disponivel()">Ativar detector de celular (YOLO)</button>
-              @if (vision.erro()) { <p class="aviso">{{ vision.erro() }}</p> }
-              <video #cam muted playsinline [style.display]="vision.ativo() ? 'block' : 'none'"></video>
-            </div>
-            <div class="cartao privacidade">
-              <b>Privacidade por arquitetura</b>
-              O vídeo é processado pelo MediaPipe e pelo YOLOv8 dentro do seu navegador, conforme a LGPD.
-            </div>
-          </aside>
+      @if (fase() === 'quiz') {
+        <div class="topo-quiz">
+          <div class="contador"><b>{{ respondidas() }}</b> respondidas · <b>{{ acertos() }}</b> certas
+            @if (respondidas() > 0) { <span class="pct">({{ pct() }}%)</span> }
+          </div>
+          <div class="acoes-topo">
+            @if (!monitorando()) {
+              <button class="btn-link" (click)="ativarCamera()">Ativar câmera</button>
+            } @else {
+              <span class="foco">Foco: {{ focoExibido() ?? '—' }}</span>
+            }
+            <button class="btn btn-ghost btn-mini" (click)="encerrar()">Encerrar</button>
+          </div>
+        </div>
+
+        @if (carregando()) {
+          <div class="cartao carregando">Gerando próxima questão…</div>
+        } @else if (questao()) {
+          <div class="cartao questao">
+            <h4>{{ questao()!.pergunta }}</h4>
+            @for (op of questao()!.opcoes; track $index) {
+              <button class="opt"
+                [class.acerto]="respondida() && $index === questao()!.correta"
+                [class.erro]="respondida() && escolhida() === $index && !acertou()"
+                [disabled]="respondida()"
+                (click)="responder($index)">{{ letra($index) }}) {{ op }}</button>
+            }
+            @if (respondida()) {
+              <p class="feedback" [class.ok]="acertou()" [class.nok]="!acertou()">
+                {{ acertou() ? 'Correto. ' : 'Não foi dessa vez. ' }}{{ justificativa() }}
+              </p>
+              <button class="btn btn-accent proxima" (click)="proxima()">Próxima questão →</button>
+            }
+          </div>
+        } @else if (erro()) {
+          <div class="cartao"><p class="erro" style="margin:0">{{ erro() }}</p></div>
+        }
+        <video #cam muted playsinline style="display:none"></video>
+      }
+
+      @if (fase() === 'fim') {
+        <div class="fim">
+          <h3>Questionário encerrado</h3>
+          <p>{{ respondidas() }} respondidas · {{ acertos() }} certas{{ respondidas() > 0 ? ' (' + pct() + '%)' : '' }}</p>
+          <button class="btn btn-ghost btn-mini" (click)="voltar()">Voltar ao início</button>
         </div>
       }
     </div>
   `,
   styles: `
-    label{display:block;margin-bottom:14px;font-weight:600;font-size:13px}
-    label select{display:block;margin-top:6px;min-width:320px}
-    .sessao{display:grid;grid-template-columns:1fr 300px;gap:28px;align-items:start;margin-top:20px}
-    .leitura{background:var(--surface);border:1px solid var(--linha);border-radius:14px;padding:38px 44px;transition:filter .6s}
-    .leitura.esmaecida{filter:saturate(.6) brightness(.96)}
-    .leitura h3{color:var(--verde);margin:22px 0 10px;font-size:18px}
-    .texto{font-size:16px;line-height:1.75;max-width:64ch;white-space:pre-line}
-    .checkpoint{border:1.5px solid var(--verde);border-radius:14px;padding:20px;margin:22px 0;background:var(--verde-claro)}
-    .cp-selo{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--verde);margin-bottom:8px}
-    .checkpoint h4{margin-bottom:12px}
-    .cp-opt{display:block;width:100%;text-align:left;padding:10px 14px;border-radius:9px;background:var(--surface);border:1.5px solid var(--linha);margin-bottom:8px}
-    .cp-opt.acerto{border-color:var(--verde);background:var(--verde-claro);font-weight:600}
-    .cp-opt.erro{border-color:var(--vinho);background:var(--vinho-claro)}
-    .feedback{font-size:14px;padding:10px 14px;border-radius:9px}
-    .feedback.ok{background:var(--verde-claro);color:var(--verde)}
-    .feedback.nok{background:var(--vinho-claro);color:var(--vinho)}
-    .fim{text-align:center;padding:30px;border:1.5px dashed var(--verde);border-radius:14px;margin-top:14px}
-    .fim h3{color:var(--verde)}
-    .painel{position:sticky;top:78px;display:flex;flex-direction:column;gap:14px}
-    .instrumento{background:var(--ink);color:#e8eaf0;border-radius:14px;padding:20px;font-family:var(--mono)}
-    .rotulo{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#8b93a7;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
-    .modo{font-size:10px;padding:3px 9px;border-radius:99px;background:#2e3850;color:#aeb8d0}
-    .modo.cam{background:#1f6f54;color:#dff3ea}
-    .modo.degradado{background:#5a4413;color:#f3dfb3}
-    .estado{text-align:center;font-size:12px;padding:6px;border-radius:8px;margin-bottom:10px}
-    .estado.atento{background:#163b2e;color:#3ddc97}
-    .estado.disperso{background:#4a2e10;color:#f0b35c}
-    .medidor{position:relative;display:flex;justify-content:center;margin-bottom:12px}
-    .medidor svg{transform:rotate(-90deg)}
-    .fundo{fill:none;stroke:#2e3850;stroke-width:9}
-    .arco{fill:none;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .5s}
-    .valor{position:absolute;inset:0;display:grid;place-items:center;text-align:center}
-    .valor b{font-size:26px;color:#fff;display:block}
-    .valor span{font-size:10px;color:#8b93a7;text-transform:uppercase}
-    .linha{display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-top:1px solid #2e3850}
-    .linha b{color:#fff;font-weight:500}
-    .acao{width:100%;margin-top:10px;background:#2e3850;color:#cdd5e6}
-    .aviso{font-size:11.5px;color:#f3dfb3;margin-top:10px}
-    video{width:100%;border-radius:10px;margin-top:10px;background:#000}
-    .privacidade{font-size:12.5px;color:var(--ink-soft)}
-    .privacidade b{color:var(--verde);display:block;margin-bottom:4px}
-    @media(max-width:920px){.sessao{grid-template-columns:1fr}.painel{position:static}}
+    .grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+    .curso{text-align:left;background:var(--surface);border:1px solid var(--linha);border-radius:4px;overflow:hidden;padding:0;transition:border-color .15s,transform .15s}
+    .curso:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .banner{height:92px;display:flex;align-items:center;justify-content:center}
+    .banner span{font-size:32px;font-weight:700;color:rgba(255,255,255,.92)}
+    .curso-nome{padding:13px 15px;font-weight:600;font-size:14px}
+    .voltar{color:var(--ink-soft);font-weight:600;font-size:13px;margin-bottom:16px}
+    .voltar:hover{color:var(--ink)}
+    .barra-sel{display:flex;justify-content:space-between;align-items:center;margin:4px 0 12px;font-size:13px;color:var(--ink-soft)}
+    .btn-link{color:var(--accent);font-weight:600;font-size:13px}
+    .pdf{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--linha);border-radius:4px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:border-color .15s,background .15s}
+    .pdf:hover{border-color:var(--accent)}
+    .pdf.marcado{border-color:var(--accent);background:var(--accent-soft)}
+    .pdf .check{width:22px;height:22px;border-radius:4px;border:1px solid var(--linha);display:grid;place-items:center;color:var(--accent);font-weight:700;flex-shrink:0}
+    .pdf.marcado .check{border-color:var(--accent)}
+    .pdf-nome{font-size:14px;font-weight:500}
+    .acoes-estudo{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+    .prefs label{margin-bottom:14px}
+    .prefs select{display:block;margin-top:6px;width:100%;max-width:360px}
+    .prefs-intro{color:var(--ink-soft);font-size:13.5px;margin-bottom:16px}
+    .material{padding:26px 30px}
+    .texto-estudo{font-family:inherit;white-space:pre-wrap;font-size:15px;line-height:1.7;color:#cfd3dc}
+    .topo-quiz{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .contador{font-size:14px;color:var(--ink-soft)}
+    .contador b{color:var(--ink)}
+    .pct{color:var(--accent)}
+    .acoes-topo{display:flex;align-items:center;gap:14px}
+    .foco{font-family:var(--mono);font-size:12px;color:var(--ink-soft)}
+    .carregando{color:var(--ink-soft);text-align:center;padding:40px}
+    .questao h4{font-size:16px;margin-bottom:16px;line-height:1.5}
+    .opt{display:block;width:100%;text-align:left;padding:12px 15px;border-radius:4px;background:var(--surface-2);border:1px solid var(--linha);margin-bottom:9px;color:var(--ink)}
+    .opt:hover:not(:disabled){border-color:var(--accent)}
+    .opt.acerto{border-color:var(--accent);background:var(--accent-soft);font-weight:600}
+    .opt.erro{border-color:var(--erro);background:var(--erro-soft)}
+    .feedback{font-size:14px;padding:12px 15px;border-radius:4px;margin:6px 0 0}
+    .feedback.ok{background:var(--accent-soft);color:var(--accent)}
+    .feedback.nok{background:var(--erro-soft);color:var(--erro)}
+    .proxima{margin-top:16px}
+    .fim{text-align:center;padding:40px;border:1px dashed var(--accent);border-radius:4px;margin-top:14px}
+    .fim h3{color:var(--accent);margin-bottom:8px}
+    .fim p{color:var(--ink-soft);margin-bottom:16px}
   `
 })
 export class EstudanteComponent implements OnInit, OnDestroy {
@@ -175,32 +194,41 @@ export class EstudanteComponent implements OnInit, OnDestroy {
 
   @ViewChild('cam') cam?: ElementRef<HTMLVideoElement>;
 
-  fase = signal<'selecao' | 'sessao' | 'fim'>('selecao');
+  fase = signal<'selecao' | 'prefs' | 'estudo' | 'quiz' | 'fim'>('selecao');
+  cadeiras = signal<Cadeira[]>([]);
+  cadeiraId = signal(0);
   materiais = signal<Material[]>([]);
-  materialId = signal(0);
-  condicao = signal<'intervencao' | 'controle'>('intervencao');
-  blocos = signal<Bloco[]>([]);
-  blocoAtual = signal(0);
-  segundos = signal(0);
-  focoSimulado = signal(80);
+  selMateriais = signal<Set<number>>(new Set());
 
-  material = computed(() => this.materiais().find(m => m.id === this.materialId()));
-  focoExibido = computed(() => (this.vision.ativo() ? this.vision.foco() : Math.round(this.focoSimulado())));
-  relogio = computed(() => {
-    const s = this.segundos();
-    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  });
+  carregando = signal(false);
+  erro = signal('');
+  questao = signal<Questao | null>(null);
+  escolhida = signal<number | null>(null);
+  respondida = signal(false);
+  acertou = signal(false);
+  justificativa = signal('');
+  respondidas = signal(0);
+  acertos = signal(0);
+  monitorando = signal(false);
+
+  nivel = signal('Intermediário');
+  objetivo = signal('Revisão para prova');
+  tempo = signal('15 min');
+  materialTexto = signal('');
+  gerandoEstudo = signal(false);
+
+  cadeiraNome = computed(() => this.cadeiras().find(c => c.id === this.cadeiraId())?.nome ?? '');
+  pct = computed(() => this.respondidas() ? Math.round(100 * this.acertos() / this.respondidas()) : 0);
+  focoExibido = computed<number | null>(() => (this.vision.ativo() ? this.vision.foco() : null));
 
   private sessaoId: number | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
-  private bufferTelemetria: TelemetriaItem[] = [];
+  private segundos = 0;
+  private buffer: TelemetriaItem[] = [];
   private eventosEnviados = 0;
 
   ngOnInit() {
-    this.api.listarMateriais('publicado').subscribe(ms => {
-      this.materiais.set(ms);
-      if (ms.length) this.materialId.set(ms[0].id);
-    });
+    this.api.listarCadeiras().subscribe(cs => this.cadeiras.set(cs));
   }
 
   ngOnDestroy() {
@@ -213,85 +241,156 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     return String.fromCharCode(97 + i);
   }
 
-  comecar() {
-    this.api.listarQuestoes(this.materialId(), 'aprovada').subscribe(qs => {
-      this.blocos.set(qs.map(q => ({
-        trecho: q.chunk_fonte,
-        questao: q,
-        respondida: false,
-        escolhida: null,
-        acertou: null,
-        justificativa: ''
-      })));
-      const modo = this.vision.ativo() ? 'camera' : 'simulado';
-      this.api.iniciarSessao(this.materialId(), this.condicao(), modo).subscribe(r => {
-        this.sessaoId = r.id;
-        this.fase.set('sessao');
-        this.blocoAtual.set(this.condicao() === 'controle' ? this.blocos().length - 1 : 0);
-        this.timer = setInterval(() => this.tick(), 1000);
-      });
+  inicial(nome: string) {
+    return (nome.trim().charAt(0) || '?').toUpperCase();
+  }
+
+  corCadeira(id: number) {
+    const h = (id * 47) % 360;
+    return `hsl(${h},38%,38%)`;
+  }
+
+  abrirCadeira(id: number) {
+    this.cadeiraId.set(id);
+    this.selMateriais.set(new Set());
+    this.materiais.set([]);
+    this.erro.set('');
+    if (id) this.api.listarMateriais(id).subscribe(ms => this.materiais.set(ms));
+  }
+
+  alternar(id: number) {
+    const novo = new Set(this.selMateriais());
+    if (novo.has(id)) novo.delete(id); else novo.add(id);
+    this.selMateriais.set(novo);
+  }
+
+  alternarTodos() {
+    if (this.selMateriais().size === this.materiais().length) {
+      this.selMateriais.set(new Set());
+    } else {
+      this.selMateriais.set(new Set(this.materiais().map(m => m.id)));
+    }
+  }
+
+  private idsSelecionados() {
+    return [...this.selMateriais()];
+  }
+
+  gerarEstudo() {
+    if (this.selMateriais().size === 0) return;
+    this.gerandoEstudo.set(true);
+    this.erro.set('');
+    this.api.gerarEstudo(this.cadeiraId(), this.idsSelecionados(), this.nivel(), this.objetivo(), this.tempo()).subscribe({
+      next: r => {
+        this.materialTexto.set(r.texto);
+        this.gerandoEstudo.set(false);
+        this.fase.set('estudo');
+      },
+      error: e => {
+        this.gerandoEstudo.set(false);
+        this.erro.set(e.error?.detail ?? 'Falha ao gerar o material de estudo');
+      }
     });
   }
 
+  comecar() {
+    if (this.selMateriais().size === 0) return;
+    const modo = this.vision.ativo() ? 'camera' : 'simulado';
+    this.carregando.set(true);
+    this.erro.set('');
+    this.respondidas.set(0);
+    this.acertos.set(0);
+    this.api.iniciarSessao(this.cadeiraId(), modo, this.idsSelecionados()).subscribe({
+      next: r => {
+        this.sessaoId = r.sessao_id;
+        this.fase.set('quiz');
+        this.timer = setInterval(() => this.tick(), 1000);
+        this.carregarProxima();
+      },
+      error: e => {
+        this.carregando.set(false);
+        this.erro.set(e.error?.detail ?? 'Falha ao iniciar o questionário');
+      }
+    });
+  }
+
+  carregarProxima() {
+    if (!this.sessaoId) return;
+    this.carregando.set(true);
+    this.erro.set('');
+    this.api.proximaQuestao(this.sessaoId, this.idsSelecionados()).subscribe({
+      next: q => {
+        this.questao.set(q);
+        this.escolhida.set(null);
+        this.respondida.set(false);
+        this.acertou.set(false);
+        this.justificativa.set('');
+        this.carregando.set(false);
+      },
+      error: e => {
+        this.carregando.set(false);
+        this.erro.set(e.error?.detail ?? 'Falha ao gerar a questão');
+      }
+    });
+  }
+
+  responder(i: number) {
+    if (!this.sessaoId || this.respondida() || !this.questao()) return;
+    this.api.responder(this.sessaoId, this.questao()!.id, i).subscribe(r => {
+      this.escolhida.set(i);
+      this.respondida.set(true);
+      this.acertou.set(r.acertou);
+      this.justificativa.set(r.justificativa);
+      this.respondidas.update(n => n + 1);
+      if (r.acertou) this.acertos.update(n => n + 1);
+    });
+  }
+
+  proxima() {
+    this.carregarProxima();
+  }
+
   private tick() {
-    this.segundos.update(s => s + 1);
-    if (!this.vision.ativo()) {
-      const alvo = 76;
-      this.focoSimulado.update(f => Math.max(25, Math.min(97, f + (alvo - f) * 0.08 + (Math.random() * 8 - 4))));
-    }
-    if (this.segundos() % 5 === 0) {
-      const novosEventos = this.yolo.eventos() - this.eventosEnviados;
+    this.segundos += 1;
+    if (this.segundos % 5 === 0) {
+      const novos = this.yolo.eventos() - this.eventosEnviados;
       this.eventosEnviados = this.yolo.eventos();
-      this.bufferTelemetria.push({
-        t_offset: this.segundos(),
-        focus: this.focoExibido(),
-        phone_eventos: Math.max(0, novosEventos),
-        modo: this.vision.ativo() ? (this.yolo.disponivel() ? 'camera+yolo' : 'camera') : 'simulado'
+      this.buffer.push({
+        t_offset: this.segundos,
+        focus: this.focoExibido() ?? 0,
+        phone_eventos: Math.max(0, novos),
+        modo: this.vision.ativo() ? 'camera' : 'simulado'
       });
     }
-    if (this.segundos() % 15 === 0 && this.bufferTelemetria.length && this.sessaoId) {
-      const lote = [...this.bufferTelemetria];
-      this.bufferTelemetria = [];
+    if (this.segundos % 15 === 0 && this.buffer.length && this.sessaoId) {
+      const lote = [...this.buffer];
+      this.buffer = [];
       this.api.enviarTelemetria(this.sessaoId, lote).subscribe();
     }
   }
 
-  responder(bloco: Bloco, escolhida: number) {
-    if (!this.sessaoId || bloco.respondida) return;
-    this.api.responder(this.sessaoId, bloco.questao.id, escolhida).subscribe(r => {
-      bloco.respondida = true;
-      bloco.escolhida = escolhida;
-      bloco.acertou = r.acertou;
-      bloco.justificativa = r.justificativa;
-      this.blocos.update(b => [...b]);
-      setTimeout(() => {
-        if (this.blocoAtual() + 1 < this.blocos().length) {
-          this.blocoAtual.update(i => i + 1);
-        } else {
-          this.encerrar();
-        }
-      }, 1800);
-    });
+  encerrar() {
+    if (this.sessaoId) {
+      if (this.buffer.length) {
+        this.api.enviarTelemetria(this.sessaoId, this.buffer).subscribe();
+        this.buffer = [];
+      }
+      this.api.encerrarSessao(this.sessaoId).subscribe();
+    }
+    if (this.timer) clearInterval(this.timer);
+    this.fase.set('fim');
   }
 
-  encerrar() {
-    if (!this.sessaoId) return;
-    if (this.bufferTelemetria.length) {
-      this.api.enviarTelemetria(this.sessaoId, this.bufferTelemetria).subscribe();
-      this.bufferTelemetria = [];
-    }
-    this.api.encerrarSessao(this.sessaoId).subscribe(() => this.fase.set('fim'));
-    if (this.timer) clearInterval(this.timer);
+  voltar() {
+    this.fase.set('selecao');
+    this.questao.set(null);
+    this.sessaoId = null;
+    this.segundos = 0;
   }
 
   async ativarCamera() {
     if (!this.cam) return;
-    await this.vision.iniciar(this.cam.nativeElement);
-  }
-
-  async ativarYolo() {
-    if (!this.cam) return;
-    const ok = await this.yolo.iniciar(this.cam.nativeElement);
-    if (!ok) this.vision.erro.set('Modelo yolov8n.onnx não encontrado em assets — detector de celular desativado (degradação graciosa).');
+    const ok = await this.vision.iniciar(this.cam.nativeElement);
+    if (ok) this.monitorando.set(true);
   }
 }

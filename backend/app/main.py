@@ -1,14 +1,14 @@
+import random
 from collections import defaultdict
 from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 from . import models, schemas, rag, llm, config
 from .database import Base, engine, get_db
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="AVA-I API", version="0.1.0")
+app = FastAPI(title="AVA-I API", version="0.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4200"],
@@ -19,94 +19,172 @@ app.add_middleware(
 
 @app.get("/saude")
 def saude():
-    return {"status": "ok", "llm": config.LLM_PROVIDER, "embeddings": config.EMBEDDINGS}
+    return {"status": "ok", "llm": config.LLM_PROVIDER, "llm_ativo": llm.disponivel()}
 
 
-@app.post("/materiais", response_model=schemas.MaterialOut)
+@app.post("/cadeiras", response_model=schemas.CadeiraOut)
+def criar_cadeira(dados: schemas.CadeiraIn, db: Session = Depends(get_db)):
+    cadeira = models.Cadeira(nome=dados.nome)
+    db.add(cadeira)
+    db.commit()
+    db.refresh(cadeira)
+    return cadeira
+
+
+@app.get("/cadeiras", response_model=list[schemas.CadeiraOut])
+def listar_cadeiras(db: Session = Depends(get_db)):
+    return db.query(models.Cadeira).order_by(models.Cadeira.id.desc()).all()
+
+
+@app.delete("/cadeiras/{cadeira_id}")
+def remover_cadeira(cadeira_id: int, db: Session = Depends(get_db)):
+    cadeira = db.get(models.Cadeira, cadeira_id)
+    if not cadeira:
+        raise HTTPException(404, "Cadeira não encontrada")
+    sessoes = db.query(models.Sessao).filter(models.Sessao.cadeira_id == cadeira_id).all()
+    ids_sessoes = [s.id for s in sessoes]
+    if ids_sessoes:
+        db.query(models.Telemetria).filter(models.Telemetria.sessao_id.in_(ids_sessoes)).delete(synchronize_session=False)
+        db.query(models.Resposta).filter(models.Resposta.sessao_id.in_(ids_sessoes)).delete(synchronize_session=False)
+    for s in sessoes:
+        db.delete(s)
+    for material in list(cadeira.materiais):
+        rag.remover_indice(material.id)
+    db.delete(cadeira)
+    db.commit()
+    return {"removido": True}
+
+
+@app.post("/cadeiras/{cadeira_id}/materiais", response_model=schemas.MaterialOut)
 async def criar_material(
+    cadeira_id: int,
     titulo: str = Form(...),
-    cenario: str = Form("restrito"),
     arquivo: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    cadeira = db.get(models.Cadeira, cadeira_id)
+    if not cadeira:
+        raise HTTPException(404, "Cadeira não encontrada")
     conteudo = await arquivo.read()
     texto = rag.extrair_texto(conteudo)
-    chunks = rag.fragmentar(texto)
+    limpo = rag.limpar_texto(texto)
+    chunks = rag.fragmentar(limpo)
     if not chunks:
-        raise HTTPException(422, "Não foi possível extrair texto do PDF")
-    material = models.Material(titulo=titulo, cenario=cenario)
+        raise HTTPException(422, "Não foi possível extrair conteúdo do PDF")
+    material = models.Material(cadeira_id=cadeira_id, titulo=titulo, status="pronto")
     db.add(material)
     db.commit()
     db.refresh(material)
     rag.indexar(material.id, chunks)
-    selecionados = rag.selecionar_chunks(chunks, config.QUESTOES_POR_MATERIAL)
-    for ordem, (_, trecho) in enumerate(selecionados):
-        contexto = rag.vizinhos(material.id, trecho) if cenario == "expandido" else ""
-        q = llm.gerar_questao(trecho, contexto)
-        db.add(models.Questao(
-            material_id=material.id,
-            ordem=ordem,
-            pergunta=q["pergunta"],
-            opcoes=q["opcoes"],
-            correta=int(q["correta"]),
-            justificativa=q.get("justificativa", ""),
-            chunk_fonte=trecho,
-        ))
-    material.status = "gerado"
-    db.commit()
-    db.refresh(material)
     return material
 
 
-@app.get("/materiais", response_model=list[schemas.MaterialOut])
-def listar_materiais(status: str | None = None, db: Session = Depends(get_db)):
-    consulta = db.query(models.Material)
-    if status:
-        consulta = consulta.filter(models.Material.status == status)
-    return consulta.order_by(models.Material.id.desc()).all()
+@app.get("/cadeiras/{cadeira_id}/materiais", response_model=list[schemas.MaterialOut])
+def listar_materiais(cadeira_id: int, db: Session = Depends(get_db)):
+    return db.query(models.Material).filter(models.Material.cadeira_id == cadeira_id).order_by(models.Material.id).all()
 
 
-@app.get("/materiais/{material_id}/questoes", response_model=list[schemas.QuestaoOut])
-def listar_questoes(material_id: int, status: str | None = None, db: Session = Depends(get_db)):
-    consulta = db.query(models.Questao).filter(models.Questao.material_id == material_id)
-    if status:
-        consulta = consulta.filter(models.Questao.status == status)
-    return consulta.order_by(models.Questao.ordem).all()
+@app.delete("/materiais/{material_id}")
+def remover_material(material_id: int, db: Session = Depends(get_db)):
+    material = db.get(models.Material, material_id)
+    if not material:
+        raise HTTPException(404, "Material não encontrado")
+    db.delete(material)
+    db.commit()
+    rag.remover_indice(material_id)
+    return {"removido": True}
 
 
-@app.patch("/questoes/{questao_id}", response_model=schemas.QuestaoOut)
-def atualizar_questao(questao_id: int, dados: schemas.QuestaoPatch, db: Session = Depends(get_db)):
-    questao = db.get(models.Questao, questao_id)
-    if not questao:
-        raise HTTPException(404, "Questão não encontrada")
-    for campo, valor in dados.model_dump(exclude_none=True).items():
-        setattr(questao, campo, valor)
+@app.post("/materiais/{material_id}/preview", response_model=schemas.PerguntaOut)
+def preview_material(material_id: int, db: Session = Depends(get_db)):
+    if not llm.disponivel():
+        raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar questões")
+    chunks = rag.bons_chunks(rag.obter_chunks(material_id))
+    if not chunks:
+        raise HTTPException(422, "Material sem conteúdo indexado; reenvie o PDF")
+    chunk = random.choice(chunks)
+    try:
+        q = llm.pergunta_llm(chunk)
+    except Exception as e:
+        raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e}. Verifique a chave e o modelo no .env.")
+    return schemas.PerguntaOut(
+        pergunta=q["pergunta"],
+        opcoes=q["opcoes"],
+        correta=int(q["correta"]),
+        justificativa=q.get("justificativa", ""),
+        fonte=chunk[:400],
+    )
+
+
+@app.post("/sessoes")
+def iniciar_sessao(dados: schemas.SessaoIn, db: Session = Depends(get_db)):
+    cadeira = db.get(models.Cadeira, dados.cadeira_id)
+    if not cadeira:
+        raise HTTPException(404, "Cadeira não encontrada")
+    if not dados.material_ids:
+        raise HTTPException(422, "Selecione ao menos um PDF")
+    sessao = models.Sessao(cadeira_id=dados.cadeira_id, modo=dados.modo)
+    db.add(sessao)
+    db.commit()
+    db.refresh(sessao)
+    return {"sessao_id": sessao.id}
+
+
+@app.post("/sessoes/{sessao_id}/questao", response_model=schemas.QuestaoOut)
+def proxima_questao(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depends(get_db)):
+    sessao = db.get(models.Sessao, sessao_id)
+    if not sessao:
+        raise HTTPException(404, "Sessão não encontrada")
+    if not llm.disponivel():
+        raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar questões")
+    candidatos = []
+    for mid in dados.material_ids:
+        for chunk in rag.bons_chunks(rag.obter_chunks(mid)):
+            candidatos.append((mid, chunk))
+    if not candidatos:
+        raise HTTPException(422, "Sem conteúdo para gerar questões")
+    material_id, chunk = random.choice(candidatos)
+    try:
+        q = llm.pergunta_llm(chunk)
+    except Exception as e:
+        raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e}")
+    questao = models.Questao(
+        material_id=material_id,
+        ordem=0,
+        topico="",
+        pergunta=q["pergunta"],
+        opcoes=q["opcoes"],
+        correta=int(q["correta"]),
+        justificativa=q.get("justificativa", ""),
+        chunk_fonte=chunk,
+        status="sessao",
+    )
+    db.add(questao)
     db.commit()
     db.refresh(questao)
     return questao
 
 
-@app.post("/materiais/{material_id}/publicar", response_model=schemas.MaterialOut)
-def publicar_material(material_id: int, db: Session = Depends(get_db)):
-    material = db.get(models.Material, material_id)
-    if not material:
-        raise HTTPException(404, "Material não encontrado")
-    aprovadas = [q for q in material.questoes if q.status == "aprovada"]
-    if not aprovadas:
-        raise HTTPException(422, "Aprove pelo menos uma questão antes de publicar")
-    material.status = "publicado"
-    db.commit()
-    db.refresh(material)
-    return material
-
-
-@app.post("/sessoes")
-def iniciar_sessao(dados: schemas.SessaoIn, db: Session = Depends(get_db)):
-    sessao = models.Sessao(material_id=dados.material_id, condicao=dados.condicao, modo=dados.modo)
-    db.add(sessao)
-    db.commit()
-    db.refresh(sessao)
-    return {"id": sessao.id}
+@app.post("/cadeiras/{cadeira_id}/estudo")
+def gerar_estudo(cadeira_id: int, dados: schemas.EstudoIn, db: Session = Depends(get_db)):
+    cadeira = db.get(models.Cadeira, cadeira_id)
+    if not cadeira:
+        raise HTTPException(404, "Cadeira não encontrada")
+    if not dados.material_ids:
+        raise HTTPException(422, "Selecione ao menos um PDF")
+    if not llm.disponivel():
+        raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar o material de estudo")
+    partes = []
+    for mid in dados.material_ids:
+        partes.extend(rag.bons_chunks(rag.obter_chunks(mid)))
+    if not partes:
+        raise HTTPException(422, "Sem conteúdo nos PDFs selecionados")
+    conteudo = "\n\n".join(partes)
+    try:
+        texto = llm.gerar_material_estudo(conteudo, dados.nivel, dados.objetivo, dados.tempo)
+    except Exception as e:
+        raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e}")
+    return {"texto": texto}
 
 
 @app.post("/sessoes/{sessao_id}/telemetria")
@@ -138,61 +216,35 @@ def encerrar_sessao(sessao_id: int, db: Session = Depends(get_db)):
     return {"encerrada": True}
 
 
-@app.get("/dashboard/{material_id}")
-def dashboard(material_id: int, db: Session = Depends(get_db)):
-    sessoes = db.query(models.Sessao).filter(models.Sessao.material_id == material_id).all()
+@app.get("/cadeiras/{cadeira_id}/dashboard")
+def dashboard(cadeira_id: int, db: Session = Depends(get_db)):
+    sessoes = db.query(models.Sessao).filter(models.Sessao.cadeira_id == cadeira_id).all()
     ids = [s.id for s in sessoes]
     telemetria = db.query(models.Telemetria).filter(models.Telemetria.sessao_id.in_(ids)).all() if ids else []
     respostas = db.query(models.Resposta).filter(models.Resposta.sessao_id.in_(ids)).all() if ids else []
 
-    foco_por_sessao = defaultdict(list)
-    fones_por_sessao = defaultdict(int)
-    for t in telemetria:
-        foco_por_sessao[t.sessao_id].append(t.focus)
-        fones_por_sessao[t.sessao_id] += t.phone_eventos
+    focos = [t.focus for t in telemetria if t.focus > 0]
+    certas = sum(1 for r in respostas if r.acertou)
+    total = len(respostas)
 
-    acertos_por_sessao = defaultdict(lambda: [0, 0])
-    acertos_por_questao = defaultdict(lambda: [0, 0])
+    por_material = defaultdict(lambda: [0, 0])
     for r in respostas:
-        acertos_por_sessao[r.sessao_id][0] += int(r.acertou)
-        acertos_por_sessao[r.sessao_id][1] += 1
-        acertos_por_questao[r.questao_id][0] += int(r.acertou)
-        acertos_por_questao[r.questao_id][1] += 1
+        questao = db.get(models.Questao, r.questao_id)
+        material = db.get(models.Material, questao.material_id) if questao else None
+        rotulo = material.titulo if material else "—"
+        por_material[rotulo][0] += int(r.acertou)
+        por_material[rotulo][1] += 1
+    barras = [
+        {"topico": rotulo, "acerto": round(100 * c / n, 1) if n else None, "respostas": n}
+        for rotulo, (c, n) in por_material.items()
+    ]
 
-    pontos = []
-    for sid, focos in foco_por_sessao.items():
-        certas, total = acertos_por_sessao.get(sid, [0, 0])
-        if total:
-            pontos.append({"focus": round(sum(focos) / len(focos), 1), "acerto": round(100 * certas / total, 1)})
-
-    condicao_por_sessao = {s.id: s.condicao for s in sessoes}
-    linha = defaultdict(lambda: defaultdict(list))
-    for t in telemetria:
-        minuto = t.t_offset // 60
-        linha[condicao_por_sessao.get(t.sessao_id, "intervencao")][minuto].append(t.focus)
-    minutos = sorted({m for cond in linha.values() for m in cond})
-    serie = lambda cond: [round(sum(linha[cond][m]) / len(linha[cond][m]), 1) if linha[cond].get(m) else None for m in minutos]
-
-    questoes = db.query(models.Questao).filter(models.Questao.material_id == material_id).order_by(models.Questao.ordem).all()
-    barras = [{
-        "questao": f"Q{q.ordem + 1}",
-        "acerto": round(100 * acertos_por_questao[q.id][0] / acertos_por_questao[q.id][1], 1) if acertos_por_questao[q.id][1] else None,
-    } for q in questoes]
-
-    eventos = defaultdict(list)
-    for sid, n in fones_por_sessao.items():
-        eventos[condicao_por_sessao.get(sid, "intervencao")].append(n)
-    media = lambda xs: round(sum(xs) / len(xs), 2) if xs else 0
-
-    todos_focos = [f for fs in foco_por_sessao.values() for f in fs]
     return {
         "kpis": {
             "sessoes": len(sessoes),
-            "focus_medio": round(sum(todos_focos) / len(todos_focos), 1) if todos_focos else 0,
-            "eventos_controle": media(eventos["controle"]),
-            "eventos_intervencao": media(eventos["intervencao"]),
+            "respostas": total,
+            "acerto_medio": round(100 * certas / total, 1) if total else 0,
+            "foco_medio": round(sum(focos) / len(focos), 1) if focos else None,
         },
-        "engajamento": {"minutos": minutos, "controle": serie("controle"), "intervencao": serie("intervencao")},
-        "acertos_por_questao": barras,
-        "pontos": pontos,
+        "acertos_por_topico": barras,
     }

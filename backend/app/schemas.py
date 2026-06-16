@@ -1,9 +1,32 @@
 from pydantic import BaseModel
 
 
+class CadeiraIn(BaseModel):
+    nome: str
+
+
+class CadeiraOut(BaseModel):
+    id: int
+    nome: str
+
+    class Config:
+        from_attributes = True
+
+
+class MaterialOut(BaseModel):
+    id: int
+    cadeira_id: int
+    titulo: str
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
 class QuestaoOut(BaseModel):
     id: int
     ordem: int
+    topico: str
     pergunta: str
     opcoes: list[str]
     correta: int
@@ -15,27 +38,34 @@ class QuestaoOut(BaseModel):
         from_attributes = True
 
 
-class MaterialOut(BaseModel):
-    id: int
-    titulo: str
-    cenario: str
-    status: str
-
-    class Config:
-        from_attributes = True
-
-
-class QuestaoPatch(BaseModel):
-    pergunta: str | None = None
-    opcoes: list[str] | None = None
-    correta: int | None = None
-    status: str | None = None
+class PerguntaOut(BaseModel):
+    pergunta: str
+    opcoes: list[str]
+    correta: int
+    justificativa: str
+    fonte: str
 
 
 class SessaoIn(BaseModel):
-    material_id: int
-    condicao: str = "intervencao"
+    cadeira_id: int
     modo: str = "simulado"
+    material_ids: list[int] = []
+
+
+class ProximaIn(BaseModel):
+    material_ids: list[int] = []
+
+
+class EstudoIn(BaseModel):
+    material_ids: list[int] = []
+    nivel: str = "Intermediário"
+    objetivo: str = "Revisão para prova"
+    tempo: str = "15 min"
+
+
+class RespostaIn(BaseModel):
+    questao_id: int
+    escolhida: int
 
 
 class TelemetriaItem(BaseModel):
@@ -47,8 +77,3 @@ class TelemetriaItem(BaseModel):
 
 class TelemetriaLote(BaseModel):
     itens: list[TelemetriaItem]
-
-
-class RespostaIn(BaseModel):
-    questao_id: int
-    escolhida: int

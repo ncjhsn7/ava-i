@@ -1,112 +1,123 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { ApiService, Material, Questao } from '../services/api.service';
+import { ApiService, Cadeira, Material, Pergunta } from '../services/api.service';
 
 @Component({
-  selector: 'app-docente',
+  selector: 'app-professor',
   template: `
     <div class="view">
       <div class="cabecalho">
-        <div class="selo">Módulo 1 · Geração de avaliações formativas</div>
-        <h2>Preparar material</h2>
-        <p>Envie o PDF da disciplina. As questões são geradas pelo pipeline RAG e só vão ao ar depois da sua aprovação.</p>
+        <div class="selo">Área do professor</div>
+        <h2>Cadeiras e materiais</h2>
+        <p>Crie uma cadeira, envie os PDFs e gere uma questão de exemplo para verificar se o material e a IA estão gerando perguntas adequadas.</p>
       </div>
 
-      <div class="cartao formulario">
-        <label>Título do material
-          <input type="text" [value]="titulo()" (input)="titulo.set($any($event.target).value)" placeholder="Ex.: Redes Neurais — Capítulo 3">
-        </label>
-        <label>Cenário de geração
-          <select [value]="cenario()" (change)="cenario.set($any($event.target).value)">
-            <option value="restrito">Restrito — somente trechos do PDF</option>
-            <option value="expandido">Expandido — trechos + vizinhos recuperados no ChromaDB</option>
-          </select>
-        </label>
-        <label>Arquivo PDF
-          <input type="file" accept="application/pdf" (change)="selecionarArquivo($event)">
-        </label>
-        <button class="btn btn-verde" (click)="enviar()" [disabled]="enviando() || !arquivo || !titulo()">
-          {{ enviando() ? 'Processando — extração, chunking, embeddings, geração…' : 'Enviar e gerar questões' }}
-        </button>
-        @if (erro()) { <p class="erro">{{ erro() }}</p> }
+      <div class="cartao">
+        <label>Nova cadeira</label>
+        <div class="linha-form">
+          <input type="text" [value]="novoNome()" (input)="novoNome.set($any($event.target).value)" placeholder="Ex.: Redes de Computadores">
+          <button class="btn btn-accent" (click)="criarCadeira()" [disabled]="!novoNome().trim()">Criar</button>
+        </div>
       </div>
 
-      @if (materiais().length) {
-        <h3 class="subtitulo">Materiais</h3>
-        @for (m of materiais(); track m.id) {
-          <div class="cartao material" (click)="abrir(m)">
-            <div>
-              <b>{{ m.titulo }}</b>
-              <span class="tag">{{ m.cenario }}</span>
-              <span class="tag" [class.verde]="m.status === 'publicado'">{{ m.status }}</span>
-            </div>
-            <span class="abrir">{{ aberto()?.id === m.id ? '▴' : '▾' }}</span>
+      @if (cadeiras().length === 0) {
+        <p class="vazio" style="margin-top:18px">Nenhuma cadeira ainda. Crie a primeira acima.</p>
+      }
+
+      @for (c of cadeiras(); track c.id) {
+        <div class="cartao cadeira">
+          <div class="cabeca" (click)="abrir(c)">
+            <b>{{ c.nome }}</b>
+            <span class="acoes-cab">
+              <button class="btn-x" title="Remover cadeira" (click)="removerCadeira(c, $event)">✕</button>
+              <span class="seta">{{ sel()?.id === c.id ? '▴' : '▾' }}</span>
+            </span>
           </div>
-          @if (aberto()?.id === m.id) {
-            @for (q of questoes(); track q.id) {
-              <div class="cartao questao" [class.aprovada]="q.status === 'aprovada'" [class.rejeitada]="q.status === 'rejeitada'">
-                <div class="meta">
-                  <span class="tag verde">gerada por RAG</span>
-                  <span class="tag">{{ q.status }}</span>
-                </div>
-                @if (editando() === q.id) {
-                  <textarea [value]="textoEdicao()" (input)="textoEdicao.set($any($event.target).value)" rows="3"></textarea>
-                } @else {
-                  <h4>{{ q.pergunta }}</h4>
-                }
-                <ol type="a">
-                  @for (opcao of q.opcoes; track $index) {
-                    <li [class.certa]="$index === q.correta">{{ opcao }}</li>
-                  }
-                </ol>
-                <div class="chunk"><b>Trecho-fonte</b>{{ q.chunk_fonte }}</div>
-                <div class="acoes">
-                  <button class="btn btn-mini btn-verde" (click)="mudarStatus(q, 'aprovada')">Aprovar</button>
-                  <button class="btn btn-mini btn-ghost" (click)="alternarEdicao(q)">{{ editando() === q.id ? 'Salvar' : 'Editar' }}</button>
-                  <button class="btn btn-mini btn-ghost" (click)="mudarStatus(q, 'rejeitada')">Rejeitar</button>
-                </div>
+
+          @if (sel()?.id === c.id) {
+            <div class="corpo">
+              <div class="bloco-upload">
+                <input type="text" [value]="tituloMaterial()" (input)="tituloMaterial.set($any($event.target).value)" placeholder="Título do PDF (ex.: Capítulo 3 — SNMP)">
+                <input type="file" accept="application/pdf" (change)="selecionarArquivo($event)">
+                <button class="btn btn-accent btn-mini" (click)="enviar(c)" [disabled]="enviando() || !arquivo || !tituloMaterial().trim()">
+                  {{ enviando() ? 'Processando…' : 'Enviar PDF' }}
+                </button>
               </div>
-            }
-            @if (m.status !== 'publicado') {
-              <button class="btn btn-verde publicar" (click)="publicar(m)">Publicar questões aprovadas</button>
-            }
+              @if (erro()) { <p class="erro">{{ erro() }}</p> }
+
+              @if (materiais().length) {
+                <div class="rotulo-secao">PDFs ({{ materiais().length }})</div>
+                @for (m of materiais(); track m.id) {
+                  <div class="material-item">
+                    <div class="mat-cabeca">
+                      <span class="pdf-nome">{{ m.titulo }}</span>
+                      <span class="mat-acoes">
+                        <button class="btn btn-ghost btn-mini" (click)="verPreview(m)" [disabled]="carregando() === m.id">
+                          {{ carregando() === m.id ? 'Gerando…' : 'Pré-visualizar questão' }}
+                        </button>
+                        <button class="btn-x" title="Remover PDF" (click)="removerMaterial(m)">✕</button>
+                      </span>
+                    </div>
+                    @if (preview() && previewId() === m.id) {
+                      <div class="preview">
+                        <p class="pv-pergunta">{{ preview()!.pergunta }}</p>
+                        <ol type="a">
+                          @for (op of preview()!.opcoes; track $index) {
+                            <li [class.certa]="$index === preview()!.correta">{{ op }}</li>
+                          }
+                        </ol>
+                        <div class="pv-fonte">Trecho-fonte: {{ preview()!.fonte }}</div>
+                      </div>
+                    }
+                  </div>
+                }
+              } @else {
+                <p class="vazio">Nenhum PDF enviado ainda.</p>
+              }
+            </div>
           }
-        }
+        </div>
       }
     </div>
   `,
   styles: `
-    .formulario label{display:block;margin-bottom:14px;font-weight:600;font-size:13px}
-    .formulario input,.formulario select{display:block;margin-top:6px;min-width:340px}
-    .erro{color:var(--vinho);margin-top:10px;font-size:13.5px}
-    .subtitulo{margin:26px 0 12px}
-    .material{display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-bottom:10px}
-    .material .tag{margin-left:8px}
-    .questao{margin:0 0 12px 22px;border-left:4px solid var(--linha)}
-    .questao.aprovada{border-left-color:var(--verde)}
-    .questao.rejeitada{opacity:.5;border-left-color:var(--vinho)}
-    .meta{display:flex;gap:8px;margin-bottom:10px}
-    .questao h4{margin-bottom:10px}
-    .questao textarea{width:100%;margin-bottom:10px}
-    ol{margin:0 0 6px 22px}
-    li{font-size:14px;color:var(--ink-soft);padding:3px 0}
-    li.certa{color:var(--verde);font-weight:600}
-    .chunk b{font-family:var(--mono);font-style:normal;font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px;color:var(--ambar)}
-    .acoes{display:flex;gap:8px}
-    .publicar{margin:6px 0 18px 22px}
+    .linha-form{display:flex;gap:10px;margin-top:8px}
+    .linha-form input{flex:1}
+    .cadeira{padding:0;overflow:hidden}
+    .cabeca{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;cursor:pointer}
+    .cabeca b{font-size:15px}
+    .acoes-cab{display:flex;align-items:center;gap:12px}
+    .seta{color:var(--ink-soft)}
+    .btn-x{color:var(--erro);background:none;font-size:14px;padding:4px 8px;border-radius:4px}
+    .btn-x:hover{background:var(--erro-soft)}
+    .corpo{padding:4px 20px 22px;border-top:1px solid var(--linha)}
+    .bloco-upload{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
+    .bloco-upload input[type=text]{flex:1;min-width:240px}
+    .rotulo-secao{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-soft);margin:22px 0 10px}
+    .material-item{background:var(--surface-2);border:1px solid var(--linha);border-radius:4px;padding:12px 14px;margin-bottom:8px}
+    .mat-cabeca{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .pdf-nome{font-size:14px;font-weight:500}
+    .mat-acoes{display:flex;align-items:center;gap:8px}
+    .preview{margin-top:12px;border-top:1px dashed var(--linha);padding-top:12px}
+    .pv-pergunta{font-size:14.5px;font-weight:600;margin-bottom:6px;line-height:1.5}
+    ol{margin:0 0 10px 20px}
+    li{font-size:13.5px;color:var(--ink-soft);padding:2px 0}
+    li.certa{color:var(--accent);font-weight:600}
+    .pv-fonte{font-size:12px;color:var(--ink-soft);font-style:italic;border-left:2px solid var(--linha);padding-left:10px}
   `
 })
-export class DocenteComponent implements OnInit {
+export class ProfessorComponent implements OnInit {
   api = inject(ApiService);
 
-  titulo = signal('');
-  cenario = signal('restrito');
+  cadeiras = signal<Cadeira[]>([]);
+  novoNome = signal('');
+  sel = signal<Cadeira | null>(null);
+  materiais = signal<Material[]>([]);
+  tituloMaterial = signal('');
   enviando = signal(false);
   erro = signal('');
-  materiais = signal<Material[]>([]);
-  aberto = signal<Material | null>(null);
-  questoes = signal<Questao[]>([]);
-  editando = signal<number | null>(null);
-  textoEdicao = signal('');
+  preview = signal<Pergunta | null>(null);
+  previewId = signal(0);
+  carregando = signal(0);
   arquivo: File | null = null;
 
   ngOnInit() {
@@ -114,7 +125,29 @@ export class DocenteComponent implements OnInit {
   }
 
   recarregar() {
-    this.api.listarMateriais().subscribe(ms => this.materiais.set(ms));
+    this.api.listarCadeiras().subscribe(cs => this.cadeiras.set(cs));
+  }
+
+  criarCadeira() {
+    const nome = this.novoNome().trim();
+    if (!nome) return;
+    this.api.criarCadeira(nome).subscribe(c => {
+      this.novoNome.set('');
+      this.recarregar();
+      this.abrir(c);
+    });
+  }
+
+  abrir(c: Cadeira) {
+    if (this.sel()?.id === c.id) {
+      this.sel.set(null);
+      return;
+    }
+    this.sel.set(c);
+    this.materiais.set([]);
+    this.preview.set(null);
+    this.erro.set('');
+    this.api.listarMateriais(c.id).subscribe(ms => this.materiais.set(ms));
   }
 
   selecionarArquivo(evento: Event) {
@@ -122,55 +155,54 @@ export class DocenteComponent implements OnInit {
     this.arquivo = alvo.files?.[0] ?? null;
   }
 
-  enviar() {
-    if (!this.arquivo || !this.titulo()) return;
+  enviar(c: Cadeira) {
+    if (!this.arquivo || !this.tituloMaterial().trim()) return;
     this.enviando.set(true);
     this.erro.set('');
-    this.api.criarMaterial(this.titulo(), this.cenario(), this.arquivo).subscribe({
-      next: m => {
+    this.api.criarMaterial(c.id, this.tituloMaterial().trim(), this.arquivo).subscribe({
+      next: () => {
         this.enviando.set(false);
-        this.titulo.set('');
-        this.recarregar();
-        this.abrir(m);
+        this.tituloMaterial.set('');
+        this.arquivo = null;
+        this.api.listarMateriais(c.id).subscribe(ms => this.materiais.set(ms));
       },
       error: e => {
         this.enviando.set(false);
-        this.erro.set(e.error?.detail ?? 'Falha ao processar o PDF. O backend está rodando em localhost:8000?');
+        this.erro.set(e.error?.detail ?? 'Falha ao processar o PDF. O backend está em localhost:8000?');
       }
     });
   }
 
-  abrir(m: Material) {
-    if (this.aberto()?.id === m.id) {
-      this.aberto.set(null);
-      return;
-    }
-    this.aberto.set(m);
-    this.api.listarQuestoes(m.id).subscribe(qs => this.questoes.set(qs));
-  }
-
-  mudarStatus(q: Questao, status: string) {
-    this.api.atualizarQuestao(q.id, { status }).subscribe(novo => {
-      this.questoes.update(lista => lista.map(item => (item.id === q.id ? novo : item)));
+  removerMaterial(m: Material) {
+    if (!confirm(`Remover o PDF "${m.titulo}"?`)) return;
+    this.api.removerMaterial(m.id).subscribe(() => {
+      if (this.sel()) this.api.listarMateriais(this.sel()!.id).subscribe(ms => this.materiais.set(ms));
     });
   }
 
-  alternarEdicao(q: Questao) {
-    if (this.editando() === q.id) {
-      this.api.atualizarQuestao(q.id, { pergunta: this.textoEdicao() }).subscribe(novo => {
-        this.questoes.update(lista => lista.map(item => (item.id === q.id ? novo : item)));
-        this.editando.set(null);
-      });
-    } else {
-      this.editando.set(q.id);
-      this.textoEdicao.set(q.pergunta);
-    }
+  removerCadeira(c: Cadeira, ev: Event) {
+    ev.stopPropagation();
+    if (!confirm(`Remover a cadeira "${c.nome}" e todos os seus PDFs?`)) return;
+    this.api.removerCadeira(c.id).subscribe(() => {
+      if (this.sel()?.id === c.id) this.sel.set(null);
+      this.recarregar();
+    });
   }
 
-  publicar(m: Material) {
-    this.api.publicar(m.id).subscribe({
-      next: () => this.recarregar(),
-      error: e => this.erro.set(e.error?.detail ?? 'Falha ao publicar')
+  verPreview(m: Material) {
+    this.carregando.set(m.id);
+    this.preview.set(null);
+    this.erro.set('');
+    this.api.previewMaterial(m.id).subscribe({
+      next: p => {
+        this.preview.set(p);
+        this.previewId.set(m.id);
+        this.carregando.set(0);
+      },
+      error: e => {
+        this.carregando.set(0);
+        this.erro.set(e.error?.detail ?? 'Falha ao gerar a pré-visualização');
+      }
     });
   }
 }
