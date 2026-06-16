@@ -1,0 +1,68 @@
+<div class="view">
+  <div class="cabecalho">
+    <div class="selo">Painel</div>
+    <h2>Desempenho e foco</h2>
+    <p>Tempo estudado, foco ao longo da sessão, distrações com o celular e acerto por material.</p>
+  </div>
+
+  @if (!cadeiraId()) {
+    @if (cadeiras().length === 0) {
+      <p class="vazio">Nenhuma cadeira ainda.</p>
+    } @else {
+      <div class="grade">
+        @for (c of cadeiras(); track c.id) {
+          <button class="curso" (click)="selecionar(c.id)">
+            <div class="banner" [style.background]="corCadeira(c.id)"><span>{{ inicial(c.nome) }}</span></div>
+            <div class="curso-nome">{{ c.nome }}</div>
+          </button>
+        }
+      </div>
+    }
+  } @else {
+    <button class="voltar" (click)="selecionar(0)">← Todas as cadeiras</button>
+    <h3 class="titulo-cadeira">{{ nomeCadeira() }}</h3>
+
+    @if (dados()) {
+      <div class="kpis">
+        <div class="kpi"><b>{{ dados()!.kpis.tempo_estudo_min }}<small>min</small></b><span>Tempo estudado</span></div>
+        <div class="kpi"><b>{{ dados()!.kpis.tempo_focado_min }}<small>min</small></b><span>Tempo focado</span></div>
+        <div class="kpi"><b>{{ dados()!.kpis.foco_medio ?? '—' }}</b><span>Foco médio</span></div>
+        <div class="kpi"><b>{{ dados()!.kpis.eventos_celular }}</b><span>Vezes no celular</span></div>
+        <div class="kpi"><b>{{ dados()!.kpis.sessoes }}</b><span>Sessões</span></div>
+        <div class="kpi"><b>{{ dados()!.kpis.respostas }}</b><span>Respostas</span></div>
+        <div class="kpi"><b>{{ dados()!.kpis.acerto_medio }}%</b><span>Acerto médio</span></div>
+      </div>
+
+      @if (dados()!.foco_no_tempo.foco.length) {
+        <div class="cartao">
+          <div class="titulo-bloco">Foco ao longo da sessão (por minuto)</div>
+          <div class="grafico">
+            @for (f of dados()!.foco_no_tempo.foco; track $index) {
+              <div class="col">
+                <div class="barra-v" [style.height.%]="f" [class.baixo]="f < 60" [title]="'min ' + dados()!.foco_no_tempo.minutos[$index] + ': ' + f"></div>
+                <span class="min">{{ dados()!.foco_no_tempo.minutos[$index] }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      } @else {
+        <p class="vazio">Sem dados de foco ainda — ative a câmera durante o estudo para registrar.</p>
+      }
+
+      @if (dados()!.acertos_por_topico.length) {
+        <div class="cartao">
+          <div class="titulo-bloco">Acerto por material</div>
+          @for (b of dados()!.acertos_por_topico; track b.topico) {
+            <div class="barra-linha">
+              <span class="rotulo">{{ b.topico }}</span>
+              <div class="barra"><div class="preenche" [style.width.%]="b.acerto ?? 0"></div></div>
+              <span class="valor">{{ b.acerto ?? '—' }}{{ b.acerto !== null ? '%' : '' }} <small>({{ b.respostas }})</small></span>
+            </div>
+          }
+        </div>
+      }
+    } @else {
+      <p class="vazio">Carregando…</p>
+    }
+  }
+</div>
