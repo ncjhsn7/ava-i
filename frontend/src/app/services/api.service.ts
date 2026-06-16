@@ -42,7 +42,16 @@ export interface TelemetriaItem {
 }
 
 export interface Painel {
-  kpis: { sessoes: number; respostas: number; acerto_medio: number; foco_medio: number | null };
+  kpis: {
+    sessoes: number;
+    respostas: number;
+    acerto_medio: number;
+    foco_medio: number | null;
+    tempo_estudo_min: number;
+    tempo_focado_min: number;
+    eventos_celular: number;
+  };
+  foco_no_tempo: { minutos: number[]; foco: number[] };
   acertos_por_topico: { topico: string; acerto: number | null; respostas: number }[];
 }
 

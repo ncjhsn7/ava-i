@@ -227,6 +227,20 @@ def dashboard(cadeira_id: int, db: Session = Depends(get_db)):
     certas = sum(1 for r in respostas if r.acertou)
     total = len(respostas)
 
+    duracao_por_sessao = defaultdict(int)
+    for t in telemetria:
+        duracao_por_sessao[t.sessao_id] = max(duracao_por_sessao[t.sessao_id], t.t_offset)
+    tempo_estudo_s = sum(duracao_por_sessao.values())
+    tempo_focado_s = sum(5 for t in telemetria if t.focus >= 60)
+    eventos_celular = sum(t.phone_eventos for t in telemetria)
+
+    por_minuto = defaultdict(list)
+    for t in telemetria:
+        if t.focus > 0:
+            por_minuto[t.t_offset // 60].append(t.focus)
+    minutos = sorted(por_minuto)
+    serie_foco = [round(sum(por_minuto[m]) / len(por_minuto[m]), 1) for m in minutos]
+
     por_material = defaultdict(lambda: [0, 0])
     for r in respostas:
         questao = db.get(models.Questao, r.questao_id)
@@ -245,6 +259,10 @@ def dashboard(cadeira_id: int, db: Session = Depends(get_db)):
             "respostas": total,
             "acerto_medio": round(100 * certas / total, 1) if total else 0,
             "foco_medio": round(sum(focos) / len(focos), 1) if focos else None,
+            "tempo_estudo_min": round(tempo_estudo_s / 60, 1),
+            "tempo_focado_min": round(tempo_focado_s / 60, 1),
+            "eventos_celular": eventos_celular,
         },
+        "foco_no_tempo": {"minutos": minutos, "foco": serie_foco},
         "acertos_por_topico": barras,
     }
