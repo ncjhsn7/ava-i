@@ -88,7 +88,17 @@ import { YoloService } from '../services/yolo.service';
       }
 
       @if (fase() === 'estudo') {
-        <button class="voltar" (click)="fase.set('prefs')">← Preferências</button>
+        <div class="topo-quiz">
+          <div class="contador">Material de estudo</div>
+          <div class="acoes-topo">
+            @if (!monitorando()) {
+              <button class="btn-link" (click)="ativarCamera()">Ativar foco (câmera)</button>
+            } @else {
+              <span class="foco" [class.disperso]="focoExibido() !== null && focoExibido()! < 60">Foco: {{ focoExibido() ?? '—' }}</span>
+            }
+            <button class="btn btn-ghost btn-mini" (click)="sairEstudo()">Voltar</button>
+          </div>
+        </div>
         <div class="cartao material">
           <pre class="texto-estudo">{{ materialTexto() }}</pre>
         </div>
@@ -131,7 +141,6 @@ import { YoloService } from '../services/yolo.service';
         } @else if (erro()) {
           <div class="cartao"><p class="erro" style="margin:0">{{ erro() }}</p></div>
         }
-        <video #cam muted playsinline style="display:none"></video>
       }
 
       @if (fase() === 'fim') {
@@ -141,6 +150,8 @@ import { YoloService } from '../services/yolo.service';
           <button class="btn btn-ghost btn-mini" (click)="voltar()">Voltar ao início</button>
         </div>
       }
+
+      <video #cam muted playsinline style="display:none"></video>
     </div>
   `,
   styles: `
@@ -285,12 +296,35 @@ export class EstudanteComponent implements OnInit, OnDestroy {
         this.materialTexto.set(r.texto);
         this.gerandoEstudo.set(false);
         this.fase.set('estudo');
+        this.iniciarSessaoLeitura();
       },
       error: e => {
         this.gerandoEstudo.set(false);
         this.erro.set(e.error?.detail ?? 'Falha ao gerar o material de estudo');
       }
     });
+  }
+
+  private iniciarSessaoLeitura() {
+    const modo = this.vision.ativo() ? 'camera' : 'simulado';
+    this.api.iniciarSessao(this.cadeiraId(), modo, this.idsSelecionados()).subscribe(r => {
+      this.sessaoId = r.sessao_id;
+      this.segundos = 0;
+      this.timer = setInterval(() => this.tick(), 1000);
+    });
+  }
+
+  sairEstudo() {
+    if (this.timer) clearInterval(this.timer);
+    if (this.sessaoId) {
+      if (this.buffer.length) {
+        this.api.enviarTelemetria(this.sessaoId, this.buffer).subscribe();
+        this.buffer = [];
+      }
+      this.api.encerrarSessao(this.sessaoId).subscribe();
+      this.sessaoId = null;
+    }
+    this.fase.set('prefs');
   }
 
   comecar() {
