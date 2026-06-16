@@ -182,7 +182,8 @@ import { YoloService } from '../services/yolo.service';
     .contador b{color:var(--ink)}
     .pct{color:var(--accent)}
     .acoes-topo{display:flex;align-items:center;gap:14px}
-    .foco{font-family:var(--mono);font-size:12px;color:var(--ink-soft)}
+    .foco{font-family:var(--mono);font-size:12px;color:var(--accent)}
+    .foco.disperso{color:var(--aviso)}
     .carregando{color:var(--ink-soft);text-align:center;padding:40px}
     .questao h4{font-size:16px;margin-bottom:16px;line-height:1.5}
     .opt{display:block;width:100%;text-align:left;padding:12px 15px;border-radius:4px;background:var(--surface-2);border:1px solid var(--linha);margin-bottom:9px;color:var(--ink)}
