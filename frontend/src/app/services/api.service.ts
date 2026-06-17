@@ -109,6 +109,10 @@ export class ApiService {
     });
   }
 
+  listarErros(cadeiraId: number, limit = 20) {
+    return this.http.get<Questao[]>(`${this.base}/cadeiras/${cadeiraId}/erros?limit=${limit}`);
+  }
+
   enviarTelemetria(sessaoId: number, itens: TelemetriaItem[]) {
     return this.http.post(`${this.base}/sessoes/${sessaoId}/telemetria`, { itens });
   }

@@ -41,6 +41,7 @@
           <button class="btn btn-ghost" (click)="fase.set('prefs')" [disabled]="selMateriais().size === 0">
             Material de estudo
           </button>
+          <button class="btn btn-ghost" (click)="revisarErros()">Revisar meus erros</button>
         </div>
         @if (erro()) { <p class="erro">{{ erro() }}</p> }
       }
@@ -104,7 +105,9 @@
 
   @if (fase() === 'quiz') {
     <div class="topo-quiz">
-      <div class="contador"><b>{{ respondidas() }}</b> respondidas · <b>{{ acertos() }}</b> certas
+      <div class="contador">
+        @if (modoRevisao()) { <span class="rev-tag">Revisão dos erros</span> }
+        <b>{{ respondidas() }}</b> respondidas · <b>{{ acertos() }}</b> certas
         @if (respondidas() > 0) { <span class="pct">({{ pct() }}%)</span> }
       </div>
       <div class="acoes-topo">
@@ -143,7 +146,7 @@
 
   @if (fase() === 'fim') {
     <div class="fim">
-      <h3>Questionário encerrado</h3>
+      <h3>{{ modoRevisao() ? 'Revisão concluída' : 'Questionário encerrado' }}</h3>
       <p>{{ respondidas() }} respondidas · {{ acertos() }} certas{{ respondidas() > 0 ? ' (' + pct() + '%)' : '' }}</p>
       <button class="btn btn-ghost btn-mini" (click)="voltar()">Voltar ao início</button>
     </div>
@@ -166,13 +169,20 @@
       }
     </div>
     @if (monitorando()) {
-      <div class="webcam-status" [title]="yolo.erro() ?? ''">
-        @if (yolo.erro()) {
-          <span class="st-erro">⚠ detector falhou</span>
-        } @else if (yolo.disponivel()) {
-          <span>📱 {{ yolo.eventos() }} · sinal {{ yolo.confianca() }}%</span>
+      <div class="webcam-status">
+        @if (!vision.calibrado()) {
+          <span class="st-cal">calibrando… olhe para a tela</span>
+        } @else if (!vision.temRosto()) {
+          <span class="st-aviso">sem rosto</span>
+        } @else if (!vision.olhandoTela()) {
+          <span class="st-aviso">fora da tela</span>
         } @else {
-          <span>carregando detector…</span>
+          <span class="st-ok">na tela</span>
+        }
+        @if (yolo.erro()) {
+          <span class="st-erro" [title]="yolo.erro()!">· 📱 ⚠</span>
+        } @else {
+          <span class="st-cel">· 📱 {{ yolo.eventos() }}</span>
         }
       </div>
     }

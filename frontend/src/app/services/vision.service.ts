@@ -5,9 +5,10 @@ const OLHO_DIREITO = [33, 160, 158, 133, 153, 144];
 const OLHO_ESQUERDO = [362, 385, 387, 263, 373, 380];
 const WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
 const MODELO = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
-const TOL_YAW = 22;
-const TOL_PITCH = 16;
+const TOL_YAW = 0.13;
+const TOL_PITCH = 0.10;
 const GRACA_MS = 2500;
+const JANELA_MS = 8000;
 
 function dist(a: { x: number; y: number }, b: { x: number; y: number }) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -22,13 +23,6 @@ function mediana(xs: number[]) {
   if (!xs.length) return 0;
   const o = [...xs].sort((a, b) => a - b);
   return o[Math.floor(o.length / 2)];
-}
-
-function angulos(m: ArrayLike<number>) {
-  const r10 = m[1], r20 = m[2], r21 = m[6], r22 = m[10];
-  const pitch = Math.atan2(r21, r22) * 180 / Math.PI;
-  const yaw = Math.atan2(-r20, Math.hypot(r21, r22)) * 180 / Math.PI;
-  return { pitch, yaw };
 }
 
 @Injectable({ providedIn: 'root' })
@@ -46,8 +40,8 @@ export class VisionService {
   private video?: HTMLVideoElement;
   private rodando = false;
   private limiar: number | null = null;
-  private yawBase = 0;
-  private pitchBase = 0;
+  private yawBase = 0.5;
+  private pitchBase = 0.5;
   private calEar: number[] = [];
   private calYaw: number[] = [];
   private calPitch: number[] = [];
@@ -61,8 +55,7 @@ export class VisionService {
       this.landmarker = await FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: MODELO },
         runningMode: 'VIDEO',
-        numFaces: 1,
-        outputFacialTransformationMatrixes: true
+        numFaces: 1
       });
       this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
       video.srcObject = this.stream;
@@ -103,8 +96,11 @@ export class VisionService {
       const valor = (ear(lm, OLHO_DIREITO) + ear(lm, OLHO_ESQUERDO)) / 2;
       this.earAtual.set(Number(valor.toFixed(3)));
       this.temRosto.set(true);
-      const mat = res.facialTransformationMatrixes?.[0]?.data;
-      const { pitch, yaw } = mat ? angulos(mat) : { pitch: 0, yaw: 0 };
+      const olhoY = (lm[33].y + lm[263].y) / 2;
+      const alturaRosto = Math.max(0.02, lm[152].y - olhoY);
+      const pitch = (lm[1].y - olhoY) / alturaRosto;
+      const largura = Math.max(0.02, lm[454].x - lm[234].x);
+      const yaw = (lm[1].x - lm[234].x) / largura;
       if (this.limiar === null) {
         if (agora - this.inicioCalibracao < 5000) {
           this.calEar.push(valor);
@@ -137,7 +133,7 @@ export class VisionService {
       ok = (agora - this.inicioDistracao) < GRACA_MS;
     }
     this.janela.push({ t: agora, ok });
-    while (this.janela.length && agora - this.janela[0].t > 12000) this.janela.shift();
+    while (this.janela.length && agora - this.janela[0].t > JANELA_MS) this.janela.shift();
     const positivas = this.janela.filter(a => a.ok).length;
     this.foco.set(Math.round((100 * positivas) / Math.max(1, this.janela.length)));
     requestAnimationFrame(() => this.loop());

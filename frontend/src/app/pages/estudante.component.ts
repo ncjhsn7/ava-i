@@ -31,6 +31,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
   respondidas = signal(0);
   acertos = signal(0);
   monitorando = signal(false);
+  modoRevisao = signal(false);
 
   nivel = signal('Intermediário');
   objetivo = signal('Revisão para prova');
@@ -152,6 +153,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.respondidas.set(0);
     this.acertos.set(0);
     this.fila = [];
+    this.modoRevisao.set(false);
     this.api.iniciarSessao(this.cadeiraId(), modo, this.idsSelecionados()).subscribe({
       next: r => {
         this.sessaoId = r.sessao_id;
@@ -166,11 +168,43 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     });
   }
 
+  revisarErros() {
+    this.erro.set('');
+    this.api.listarErros(this.cadeiraId(), 20).subscribe({
+      next: qs => {
+        if (!qs.length) {
+          this.erro.set('Você ainda não tem erros para revisar nesta cadeira.');
+          return;
+        }
+        const ids = this.materiais().map(m => m.id);
+        const modo = this.vision.ativo() ? 'camera' : 'simulado';
+        this.api.iniciarSessao(this.cadeiraId(), modo, ids).subscribe({
+          next: r => {
+            this.sessaoId = r.sessao_id;
+            this.modoRevisao.set(true);
+            this.fila = qs;
+            this.respondidas.set(0);
+            this.acertos.set(0);
+            this.fase.set('quiz');
+            this.timer = setInterval(() => this.tick(), 1000);
+            this.mostrar(this.fila.shift()!);
+          },
+          error: e => this.erro.set(e.error?.detail ?? 'Falha ao iniciar a revisão')
+        });
+      },
+      error: e => this.erro.set(e.error?.detail ?? 'Falha ao carregar os erros')
+    });
+  }
+
   carregarProxima() {
     if (!this.sessaoId) return;
     if (this.fila.length) {
       this.mostrar(this.fila.shift()!);
-      this.prefetch();
+      if (!this.modoRevisao()) this.prefetch();
+      return;
+    }
+    if (this.modoRevisao()) {
+      this.encerrar();
       return;
     }
     this.carregando.set(true);
@@ -258,6 +292,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.sessaoId = null;
     this.segundos = 0;
     this.fila = [];
+    this.modoRevisao.set(false);
   }
 
   async ativarCamera() {

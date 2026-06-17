@@ -256,6 +256,34 @@ def encerrar_sessao(sessao_id: int, db: Session = Depends(get_db)):
     return {"encerrada": True}
 
 
+@app.get("/cadeiras/{cadeira_id}/erros", response_model=list[schemas.QuestaoOut])
+def listar_erros(cadeira_id: int, limit: int = 20, db: Session = Depends(get_db)):
+    sessoes = db.query(models.Sessao).filter(models.Sessao.cadeira_id == cadeira_id).all()
+    ids = [s.id for s in sessoes]
+    if not ids:
+        return []
+    respostas = (
+        db.query(models.Resposta)
+        .filter(models.Resposta.sessao_id.in_(ids))
+        .order_by(models.Resposta.id.desc())
+        .all()
+    )
+    vistos: set[int] = set()
+    questoes = []
+    for r in respostas:
+        if r.questao_id in vistos:
+            continue
+        vistos.add(r.questao_id)
+        if r.acertou:
+            continue
+        questao = db.get(models.Questao, r.questao_id)
+        if questao:
+            questoes.append(questao)
+        if len(questoes) >= limit:
+            break
+    return questoes
+
+
 @app.get("/cadeiras/{cadeira_id}/dashboard")
 def dashboard(cadeira_id: int, db: Session = Depends(get_db)):
     sessoes = db.query(models.Sessao).filter(models.Sessao.cadeira_id == cadeira_id).all()
