@@ -1,8 +1,8 @@
 <div class="view">
   <div class="cabecalho">
-    <div class="selo">Área do professor</div>
+    <div class="selo">Materiais</div>
     <h2>Cadeiras e materiais</h2>
-    <p>Crie uma cadeira, envie os PDFs e gere uma questão de exemplo para verificar se o material e a IA estão gerando perguntas adequadas.</p>
+    <p>Crie uma cadeira, envie os PDFs e gere uma questão de exemplo para conferir se o material está gerando perguntas adequadas.</p>
   </div>
 
   <div class="cartao">
@@ -31,7 +31,11 @@
         <div class="corpo">
           <div class="bloco-upload">
             <input type="text" [value]="tituloMaterial()" (input)="tituloMaterial.set($any($event.target).value)" placeholder="Título do PDF (ex.: Capítulo 3 — SNMP)">
-            <input type="file" accept="application/pdf" (change)="selecionarArquivo($event)">
+            <label class="arquivo">
+              <input type="file" accept="application/pdf" (change)="selecionarArquivo($event)" hidden>
+              <span class="arquivo-botao">Escolher PDF</span>
+              <span class="arquivo-nome">{{ nomeArquivo() || 'Nenhum arquivo' }}</span>
+            </label>
             <button class="btn btn-accent btn-mini" (click)="enviar(c)" [disabled]="enviando() || !arquivo || !tituloMaterial().trim()">
               {{ enviando() ? 'Processando…' : 'Enviar PDF' }}
             </button>

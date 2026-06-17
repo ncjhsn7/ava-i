@@ -1,50 +1,51 @@
 :root{
-  --bg:#0d0f13;
-  --surface:#14171d;
-  --surface-2:#1a1e26;
-  --linha:#252a33;
-  --ink:#e7e9ee;
-  --ink-soft:#878f9d;
+  --bg:#0b0c0e;
+  --surface:#131417;
+  --surface-2:#191a1e;
+  --linha:#212228;
+  --linha-sutil:#191a1e;
+  --ink:#e6e7ea;
+  --ink-soft:#80838b;
   --accent:#5b7cfa;
   --accent-ink:#ffffff;
-  --accent-soft:rgba(91,124,250,.14);
+  --accent-soft:rgba(91,124,250,.12);
   --erro:#e26d6d;
-  --erro-soft:rgba(226,109,109,.13);
+  --erro-soft:rgba(226,109,109,.12);
   --aviso:#e0b15a;
   --mono:'IBM Plex Mono',ui-monospace,monospace;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:none;background:none;font-size:14px;color:inherit}
 
-.view{max-width:1080px;margin:0 auto;padding:34px 24px 90px}
-.cabecalho{margin-bottom:26px}
-.cabecalho .selo{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.14em;text-transform:uppercase}
-.cabecalho h2{font-size:25px;letter-spacing:-.01em;margin-top:8px;font-weight:650}
-.cabecalho p{color:var(--ink-soft);margin-top:8px;max-width:660px}
+.view{max-width:1040px;margin:0 auto;padding:40px 24px 96px}
+.cabecalho{margin-bottom:30px}
+.cabecalho .selo{font-family:var(--mono);font-size:11px;color:var(--ink-soft);letter-spacing:.16em;text-transform:uppercase}
+.cabecalho h2{font-size:23px;letter-spacing:-.01em;margin-top:10px;font-weight:600}
+.cabecalho p{color:var(--ink-soft);margin-top:8px;max-width:640px;font-size:14.5px}
 
-.cartao{background:var(--surface);border:1px solid var(--linha);border-radius:4px;padding:20px}
+.cartao{background:var(--surface);border:1px solid var(--linha-sutil);border-radius:2px;padding:20px}
 .cartao + .cartao{margin-top:10px}
 
-.btn{padding:10px 18px;border-radius:4px;font-weight:600;font-size:14px;transition:background .15s,border-color .15s}
+.btn{padding:9px 16px;border-radius:2px;font-weight:500;font-size:14px;transition:background .14s}
 .btn-accent{background:var(--accent);color:var(--accent-ink)}
-.btn-accent:hover{background:#6f8cff}
-.btn-ghost{border:1px solid var(--linha);color:var(--ink);background:var(--surface-2)}
-.btn-ghost:hover{border-color:#39414f}
+.btn-accent:hover{background:#6e8bff}
+.btn-ghost{background:var(--surface-2);color:var(--ink)}
+.btn-ghost:hover{background:#23252b}
 .btn-danger{color:var(--erro);background:var(--erro-soft)}
 .btn-danger:hover{background:rgba(226,109,109,.2)}
-.btn-mini{padding:6px 12px;border-radius:4px;font-size:12.5px;font-weight:600}
-.btn:disabled{opacity:.45;cursor:default}
+.btn-mini{padding:6px 11px;border-radius:2px;font-size:12.5px;font-weight:500}
+.btn:disabled{opacity:.4;cursor:default}
 
-.tag{font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:3px;background:var(--surface-2);border:1px solid var(--linha);color:var(--ink-soft);letter-spacing:.03em}
-.tag.accent{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.tag{font-family:var(--mono);font-size:10.5px;padding:3px 7px;border-radius:2px;background:var(--surface-2);color:var(--ink-soft);letter-spacing:.02em}
+.tag.accent{background:var(--accent-soft);color:var(--accent)}
 
-label{display:block;font-weight:600;font-size:13px;color:var(--ink)}
-input,select,textarea{font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--linha);border-radius:4px;background:var(--surface-2);color:var(--ink);outline:none}
+label{display:block;font-weight:500;font-size:13px;color:var(--ink-soft)}
+input,select,textarea{font-family:inherit;font-size:14px;padding:9px 12px;border:1px solid var(--linha);border-radius:2px;background:var(--surface);color:var(--ink);outline:none}
 input:focus,select:focus,textarea:focus{border-color:var(--accent)}
 input[type=file]{padding:8px;color:var(--ink-soft)}
-::placeholder{color:#5b6373}
+::placeholder{color:#54575e}
 
 .erro{color:var(--erro);font-size:13.5px;margin-top:10px}
 .vazio{color:var(--ink-soft);font-size:14px}

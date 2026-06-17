@@ -99,6 +99,10 @@ export class ApiService {
     return this.http.post<Questao>(`${this.base}/sessoes/${sessaoId}/questao`, { material_ids: materialIds });
   }
 
+  loteQuestoes(sessaoId: number, materialIds: number[], n = 5) {
+    return this.http.post<Questao[]>(`${this.base}/sessoes/${sessaoId}/lote`, { material_ids: materialIds, n });
+  }
+
   gerarEstudo(cadeiraId: number, materialIds: number[], nivel: string, objetivo: string, tempo: string) {
     return this.http.post<{ texto: string }>(`${this.base}/cadeiras/${cadeiraId}/estudo`, {
       material_ids: materialIds, nivel, objetivo, tempo

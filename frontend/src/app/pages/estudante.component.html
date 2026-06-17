@@ -49,34 +49,40 @@
 
   @if (fase() === 'prefs') {
     <button class="voltar" (click)="fase.set('selecao')">← PDFs</button>
-    <div class="cartao prefs">
-      <p class="prefs-intro">Ajuste o material ao seu momento — as respostas guiam a explicação gerada.</p>
-      <label>Seu nível na matéria
-        <select [value]="nivel()" (change)="nivel.set($any($event.target).value)">
-          <option value="Iniciante">Iniciante</option>
-          <option value="Intermediário">Intermediário</option>
-          <option value="Avançado">Avançado</option>
-        </select>
-      </label>
-      <label>Objetivo
-        <select [value]="objetivo()" (change)="objetivo.set($any($event.target).value)">
-          <option value="Primeiro contato">Primeiro contato com o assunto</option>
-          <option value="Revisão para prova">Revisão para prova</option>
-          <option value="Aprofundar">Aprofundar o conhecimento</option>
-        </select>
-      </label>
-      <label>Tempo disponível
-        <select [value]="tempo()" (change)="tempo.set($any($event.target).value)">
-          <option value="5 min">~5 min (bem resumido)</option>
-          <option value="15 min">~15 min</option>
-          <option value="30+ min">30+ min (completo)</option>
-        </select>
-      </label>
-      <button class="btn btn-accent" (click)="gerarEstudo()" [disabled]="gerandoEstudo()">
-        {{ gerandoEstudo() ? 'Gerando material…' : 'Gerar material de estudo' }}
-      </button>
-      @if (erro()) { <p class="erro">{{ erro() }}</p> }
-    </div>
+    @if (gerandoEstudo()) {
+      <div class="cartao carregando-box">
+        <div class="spinner"></div>
+        <p class="carregando-titulo">Gerando seu material de estudo…</p>
+        <span class="carregando-dica">A IA está lendo os PDFs e montando a explicação. Pode levar alguns segundos.</span>
+      </div>
+    } @else {
+      <div class="cartao prefs">
+        <p class="prefs-intro">Ajuste o material ao seu momento — as respostas guiam a explicação gerada.</p>
+        <label>Seu nível na matéria
+          <select [value]="nivel()" (change)="nivel.set($any($event.target).value)">
+            <option value="Iniciante">Iniciante</option>
+            <option value="Intermediário">Intermediário</option>
+            <option value="Avançado">Avançado</option>
+          </select>
+        </label>
+        <label>Objetivo
+          <select [value]="objetivo()" (change)="objetivo.set($any($event.target).value)">
+            <option value="Primeiro contato">Primeiro contato com o assunto</option>
+            <option value="Revisão para prova">Revisão para prova</option>
+            <option value="Aprofundar">Aprofundar o conhecimento</option>
+          </select>
+        </label>
+        <label>Tempo disponível
+          <select [value]="tempo()" (change)="tempo.set($any($event.target).value)">
+            <option value="5 min">~5 min (bem resumido)</option>
+            <option value="15 min">~15 min</option>
+            <option value="30+ min">30+ min (completo)</option>
+          </select>
+        </label>
+        <button class="btn btn-accent" (click)="gerarEstudo()">Gerar material de estudo</button>
+        @if (erro()) { <p class="erro">{{ erro() }}</p> }
+      </div>
+    }
   }
 
   @if (fase() === 'estudo') {
@@ -143,5 +149,32 @@
     </div>
   }
 
-  <video #cam muted playsinline style="display:none"></video>
+  <div class="webcam-wrap" [class.ativa]="monitorando()">
+    <div class="webcam-circulo">
+      <svg class="anel" viewBox="0 0 132 132">
+        <circle class="anel-fundo" cx="66" cy="66" r="63"></circle>
+        <circle class="anel-foco" cx="66" cy="66" r="63"
+          [attr.stroke]="corFoco()"
+          [attr.stroke-dasharray]="circ"
+          [attr.stroke-dashoffset]="circ * (1 - (focoExibido() ?? 0) / 100)"></circle>
+      </svg>
+      <video #cam muted playsinline></video>
+      <span class="foco-num" [style.color]="corFoco()">{{ focoExibido() ?? '—' }}</span>
+      @if (yolo.celularVisivel()) { <span class="badge-cel" title="Celular detectado">📱</span> }
+      @if (monitorando()) {
+        <button class="webcam-off" (click)="desativarMonitor()" title="Desligar monitoramento">✕</button>
+      }
+    </div>
+    @if (monitorando()) {
+      <div class="webcam-status" [title]="yolo.erro() ?? ''">
+        @if (yolo.erro()) {
+          <span class="st-erro">⚠ detector falhou</span>
+        } @else if (yolo.disponivel()) {
+          <span>📱 {{ yolo.eventos() }} · sinal {{ yolo.confianca() }}%</span>
+        } @else {
+          <span>carregando detector…</span>
+        }
+      </div>
+    }
+  </div>
 </div>

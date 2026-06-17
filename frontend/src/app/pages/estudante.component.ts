@@ -41,8 +41,15 @@ export class EstudanteComponent implements OnInit, OnDestroy {
   cadeiraNome = computed(() => this.cadeiras().find(c => c.id === this.cadeiraId())?.nome ?? '');
   pct = computed(() => this.respondidas() ? Math.round(100 * this.acertos() / this.respondidas()) : 0);
   focoExibido = computed<number | null>(() => (this.vision.ativo() ? this.vision.foco() : null));
+  corFoco = computed(() => {
+    const v = this.focoExibido();
+    if (v === null) return '#3a4150';
+    return v >= 60 ? '#5b7cfa' : v >= 40 ? '#e0b15a' : '#e26d6d';
+  });
+  circ = 2 * Math.PI * 63;
 
   private sessaoId: number | null = null;
+  private fila: Questao[] = [];
   private timer: ReturnType<typeof setInterval> | null = null;
   private segundos = 0;
   private buffer: TelemetriaItem[] = [];
@@ -144,6 +151,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.erro.set('');
     this.respondidas.set(0);
     this.acertos.set(0);
+    this.fila = [];
     this.api.iniciarSessao(this.cadeiraId(), modo, this.idsSelecionados()).subscribe({
       next: r => {
         this.sessaoId = r.sessao_id;
@@ -160,21 +168,40 @@ export class EstudanteComponent implements OnInit, OnDestroy {
 
   carregarProxima() {
     if (!this.sessaoId) return;
+    if (this.fila.length) {
+      this.mostrar(this.fila.shift()!);
+      this.prefetch();
+      return;
+    }
     this.carregando.set(true);
     this.erro.set('');
-    this.api.proximaQuestao(this.sessaoId, this.idsSelecionados()).subscribe({
-      next: q => {
-        this.questao.set(q);
-        this.escolhida.set(null);
-        this.respondida.set(false);
-        this.acertou.set(false);
-        this.justificativa.set('');
+    this.api.loteQuestoes(this.sessaoId, this.idsSelecionados(), 5).subscribe({
+      next: qs => {
+        this.fila = qs;
         this.carregando.set(false);
+        if (this.fila.length) this.mostrar(this.fila.shift()!);
+        else this.erro.set('Não foi possível gerar questões.');
       },
       error: e => {
         this.carregando.set(false);
         this.erro.set(e.error?.detail ?? 'Falha ao gerar a questão');
       }
+    });
+  }
+
+  private mostrar(q: Questao) {
+    this.questao.set(q);
+    this.escolhida.set(null);
+    this.respondida.set(false);
+    this.acertou.set(false);
+    this.justificativa.set('');
+  }
+
+  private prefetch() {
+    if (this.fila.length > 1 || !this.sessaoId) return;
+    this.api.loteQuestoes(this.sessaoId, this.idsSelecionados(), 5).subscribe({
+      next: qs => this.fila.push(...qs),
+      error: () => {}
     });
   }
 
@@ -230,11 +257,21 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.questao.set(null);
     this.sessaoId = null;
     this.segundos = 0;
+    this.fila = [];
   }
 
   async ativarCamera() {
     if (!this.cam) return;
     const ok = await this.vision.iniciar(this.cam.nativeElement);
-    if (ok) this.monitorando.set(true);
+    if (ok) {
+      this.monitorando.set(true);
+      this.yolo.iniciar(this.cam.nativeElement);
+    }
+  }
+
+  desativarMonitor() {
+    this.vision.parar();
+    this.yolo.parar();
+    this.monitorando.set(false);
   }
 }

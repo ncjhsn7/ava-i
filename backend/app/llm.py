@@ -209,6 +209,7 @@ def disponivel() -> bool:
 
 def _gemini(prompt: str, max_tokens: int, json_mode: bool = True) -> str:
     import urllib.request
+    import urllib.error
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent"
     gen = {
@@ -230,8 +231,14 @@ def _gemini(prompt: str, max_tokens: int, json_mode: bool = True) -> str:
             "x-goog-api-key": config.GEMINI_API_KEY,
         },
     )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        dados = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            dados = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        detalhe = e.read().decode("utf-8", "ignore")
+        if e.code == 429:
+            raise RuntimeError("limite de uso da camada gratuita do Gemini atingido (429). Aguarde um minuto e tente de novo.") from None
+        raise RuntimeError(f"HTTP {e.code}: {detalhe[:200]}") from None
     candidato = (dados.get("candidates") or [{}])[0]
     partes = candidato.get("content", {}).get("parts", [])
     texto = "".join(p.get("text", "") for p in partes)
@@ -306,6 +313,32 @@ def pergunta_llm(conteudo: str) -> dict:
 
 def gerar_pergunta_conteudo(conteudo: str) -> dict:
     return pergunta_llm(conteudo)
+
+
+PROMPT_LOTE = """Você é um professor criando questões de estudo a partir de um material didático.
+Para CADA trecho numerado abaixo, crie 1 questão de múltipla escolha em português (4 alternativas plausíveis, exatamente 1 correta), respondível apenas com o conteúdo daquele trecho.
+
+TRECHOS:
+{trechos}
+
+Responda SOMENTE com um JSON válido no formato, com exatamente {n} itens na ordem dos trechos:
+{{"questoes": [{{"pergunta": "...", "opcoes": ["...", "...", "...", "..."], "correta": 0, "justificativa": "..."}}]}}"""
+
+
+def perguntas_lote(conteudos: list[str]) -> list[dict]:
+    if not conteudos:
+        return []
+    trechos = "\n\n".join(f"[{i + 1}] {c[:1500]}" for i, c in enumerate(conteudos))
+    texto = _completar(PROMPT_LOTE.format(trechos=trechos, n=len(conteudos)), 4096)
+    bruto = re.search(r"\{.*\}", texto, re.S)
+    dados = json.loads(bruto.group(0)) if bruto else {}
+    saida = []
+    for q in dados.get("questoes", []):
+        if q.get("opcoes") and len(q["opcoes"]) >= 2:
+            saida.append(_embaralhar(q))
+    if not saida:
+        raise ValueError("o modelo não retornou questões válidas")
+    return saida
 
 
 def extrair_topicos(texto: str) -> list[tuple[str, str]]:

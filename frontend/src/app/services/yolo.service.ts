@@ -3,7 +3,7 @@ import * as ort from 'onnxruntime-web';
 
 const MODELO_LOCAL = '/assets/yolov8n.onnx';
 const CLASSE_CELULAR = 67;
-const LIMIAR_SCORE = 0.45;
+const LIMIAR_SCORE = 0.35;
 const QUADROS_CONSECUTIVOS = 2;
 const TAMANHO = 640;
 
@@ -12,8 +12,12 @@ export class YoloService {
   disponivel = signal(false);
   eventos = signal(0);
   celularVisivel = signal(false);
+  confianca = signal(0);
+  erro = signal<string | null>(null);
 
   private sessao?: ort.InferenceSession;
+  private nomeSaida = 'output0';
+  private nomeEntrada = 'images';
   private video?: HTMLVideoElement;
   private canvas = document.createElement('canvas');
   private rodando = false;
@@ -23,17 +27,26 @@ export class YoloService {
   async iniciar(video: HTMLVideoElement): Promise<boolean> {
     try {
       ort.env.wasm.wasmPaths = '/onnx/';
+      ort.env.wasm.numThreads = 1;
       const resposta = await fetch(MODELO_LOCAL, { method: 'HEAD' });
-      if (!resposta.ok) return false;
-      this.sessao = await ort.InferenceSession.create(MODELO_LOCAL);
+      if (!resposta.ok) {
+        this.erro.set('Modelo yolov8n.onnx não encontrado em /assets.');
+        return false;
+      }
+      this.sessao = await ort.InferenceSession.create(MODELO_LOCAL, { executionProviders: ['wasm'] });
+      this.nomeEntrada = this.sessao.inputNames[0] ?? 'images';
+      this.nomeSaida = this.sessao.outputNames[0] ?? 'output0';
       this.video = video;
       this.canvas.width = TAMANHO;
       this.canvas.height = TAMANHO;
       this.rodando = true;
       this.disponivel.set(true);
+      this.erro.set(null);
       this.agendar();
       return true;
-    } catch {
+    } catch (e) {
+      console.error('Detector de celular (YOLO) falhou ao iniciar:', e);
+      this.erro.set('Detector de celular falhou ao carregar: ' + ((e as Error)?.message ?? e));
       this.disponivel.set(false);
       return false;
     }
@@ -42,11 +55,12 @@ export class YoloService {
   parar() {
     this.rodando = false;
     this.disponivel.set(false);
+    this.celularVisivel.set(false);
   }
 
   private agendar() {
     if (!this.rodando) return;
-    setTimeout(() => this.inferir().finally(() => this.agendar()), 1500);
+    setTimeout(() => this.inferir().catch(e => console.error('YOLO inferência:', e)).finally(() => this.agendar()), 1200);
   }
 
   private async inferir() {
@@ -67,14 +81,17 @@ export class YoloService {
       entrada[2 * area + i] = pixels[i * 4 + 2] / 255;
     }
     const tensor = new ort.Tensor('float32', entrada, [1, 3, TAMANHO, TAMANHO]);
-    const saida = await this.sessao.run({ images: tensor });
-    const dados = saida['output0'].data as Float32Array;
+    const saida = await this.sessao.run({ [this.nomeEntrada]: tensor });
+    const dados = saida[this.nomeSaida].data as Float32Array;
     const colunas = 8400;
     const linhaCelular = (4 + CLASSE_CELULAR) * colunas;
-    let detectado = false;
+    let melhor = 0;
     for (let i = 0; i < colunas; i++) {
-      if (dados[linhaCelular + i] > LIMIAR_SCORE) { detectado = true; break; }
+      const s = dados[linhaCelular + i];
+      if (s > melhor) melhor = s;
     }
+    this.confianca.set(Math.round(melhor * 100));
+    const detectado = melhor > LIMIAR_SCORE;
     this.celularVisivel.set(detectado);
     if (detectado) {
       this.consecutivos++;

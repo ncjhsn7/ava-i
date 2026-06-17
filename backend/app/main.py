@@ -165,6 +165,46 @@ def proxima_questao(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depe
     return questao
 
 
+@app.post("/sessoes/{sessao_id}/lote", response_model=list[schemas.QuestaoOut])
+def lote_questoes(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depends(get_db)):
+    sessao = db.get(models.Sessao, sessao_id)
+    if not sessao:
+        raise HTTPException(404, "Sessão não encontrada")
+    if not llm.disponivel():
+        raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar questões")
+    candidatos = []
+    for mid in dados.material_ids:
+        for chunk in rag.bons_chunks(rag.obter_chunks(mid)):
+            candidatos.append((mid, chunk))
+    if not candidatos:
+        raise HTTPException(422, "Sem conteúdo para gerar questões")
+    n = max(1, min(dados.n, 8, len(candidatos)))
+    escolhidos = random.sample(candidatos, n)
+    try:
+        questoes = llm.perguntas_lote([c for _, c in escolhidos])
+    except Exception as e:
+        raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e}")
+    criadas = []
+    for (material_id, chunk), q in zip(escolhidos, questoes):
+        questao = models.Questao(
+            material_id=material_id,
+            ordem=0,
+            topico="",
+            pergunta=q["pergunta"],
+            opcoes=q["opcoes"],
+            correta=int(q["correta"]),
+            justificativa=q.get("justificativa", ""),
+            chunk_fonte=chunk,
+            status="sessao",
+        )
+        db.add(questao)
+        criadas.append(questao)
+    db.commit()
+    for c in criadas:
+        db.refresh(c)
+    return criadas
+
+
 @app.post("/cadeiras/{cadeira_id}/estudo")
 def gerar_estudo(cadeira_id: int, dados: schemas.EstudoIn, db: Session = Depends(get_db)):
     cadeira = db.get(models.Cadeira, cadeira_id)

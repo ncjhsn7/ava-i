@@ -19,6 +19,7 @@ export class ProfessorComponent implements OnInit {
   preview = signal<Pergunta | null>(null);
   previewId = signal(0);
   carregando = signal(0);
+  nomeArquivo = signal('');
   arquivo: File | null = null;
 
   ngOnInit() {
@@ -54,6 +55,7 @@ export class ProfessorComponent implements OnInit {
   selecionarArquivo(evento: Event) {
     const alvo = evento.target as HTMLInputElement;
     this.arquivo = alvo.files?.[0] ?? null;
+    this.nomeArquivo.set(this.arquivo?.name ?? '');
   }
 
   enviar(c: Cadeira) {
@@ -65,6 +67,7 @@ export class ProfessorComponent implements OnInit {
         this.enviando.set(false);
         this.tituloMaterial.set('');
         this.arquivo = null;
+        this.nomeArquivo.set('');
         this.api.listarMateriais(c.id).subscribe(ms => this.materiais.set(ms));
       },
       error: e => {

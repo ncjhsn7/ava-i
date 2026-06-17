@@ -1,0 +1,11 @@
+.lobby{padding-top:60px}
+.hero{margin-bottom:38px}
+.hero .selo{font-family:var(--mono);font-size:12px;letter-spacing:.22em;color:var(--accent);text-transform:uppercase}
+.hero h1{font-size:33px;font-weight:600;letter-spacing:-.02em;margin-top:12px}
+.hero p{color:var(--ink-soft);margin-top:12px;max-width:520px;font-size:15px;line-height:1.6}
+.opcoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.opcao{display:flex;flex-direction:column;align-items:flex-start;gap:7px;background:var(--surface);border-radius:2px;padding:22px;transition:background .14s}
+.opcao:hover{background:var(--surface-2)}
+.op-icone{font-size:16px;color:var(--accent);width:34px;height:34px;display:grid;place-items:center;background:var(--accent-soft);border-radius:2px;margin-bottom:4px}
+.opcao b{font-size:16px;font-weight:600}
+.op-desc{font-size:13.5px;color:var(--ink-soft);line-height:1.55}

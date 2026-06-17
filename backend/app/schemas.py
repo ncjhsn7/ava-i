@@ -54,6 +54,7 @@ class SessaoIn(BaseModel):
 
 class ProximaIn(BaseModel):
     material_ids: list[int] = []
+    n: int = 5
 
 
 class EstudoIn(BaseModel):
