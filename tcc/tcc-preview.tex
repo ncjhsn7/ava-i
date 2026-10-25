@@ -1,0 +1,90 @@
+%----------------------------------------------------------------------------------
+% PRÉ-VISUALIZAÇÃO: compila o mesmo conteúdo de tcc-pucrs.tex sem a tcc.cls.
+% Serve apenas para conferir texto, figuras e referências. A versão de
+% entrega é tcc-pucrs.tex (capa, folha de rosto e estilo oficiais da PUCRS).
+% Compilar: pdflatex tcc-preview -> bibtex tcc-preview -> pdflatex -> pdflatex
+%----------------------------------------------------------------------------------
+\documentclass[12pt,a4paper,oneside]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\IfFileExists{lmodern.sty}{\usepackage{lmodern}}{}
+\usepackage[brazil]{babel}
+\usepackage[a4paper,top=3cm,left=3cm,right=2cm,bottom=2cm]{geometry}
+\usepackage{setspace}\onehalfspacing
+\usepackage{graphicx}
+\graphicspath{{figuras/}}
+\usepackage{xspace}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{array}
+\usepackage{caption}
+\captionsetup{font=small,labelfont=bf}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\usepackage[hidelinks]{hyperref}
+
+% ---- Emulação mínima dos comandos da tcc.cls ----
+\makeatletter
+\renewcommand{\title}[2]{\gdef\@title{#1}\gdef\@titleen{#2}}
+\newcommand{\tipotrabalho}[1]{}
+\newcommand{\curso}[1]{}
+\newcommand{\orientador}[1]{\gdef\@orientador{#1}}
+\newcommand{\ptci}{}
+\newcommand{\cc}{}
+\newcommand{\sigla}[2]{}
+\newcommand{\listofacronyms}{}
+\renewenvironment{abstract}[1]{\chapter*{Abstract}\def\@kw{#1}}{\par\medskip\noindent\textbf{Keywords:} \@kw.}
+\newenvironment{resumo}[1]{\chapter*{Resumo}\def\@kw{#1}}{\par\medskip\noindent\textbf{Palavras-chave:} \@kw.}
+\renewcommand{\maketitle}{%
+  \begin{titlepage}\centering
+  {\large Pontifícia Universidade Católica do Rio Grande do Sul\\ Escola Politécnica -- Ciência da Computação\par}
+  \vfill
+  {\large\@author\par}\vspace{1.5cm}
+  {\LARGE\bfseries\@title\par}\vspace{0.6cm}
+  {\large\itshape\@titleen\par}
+  \vfill
+  {Orientador: \@orientador\par}\vspace{1cm}
+  {\small\textcolor{red!70!black}{Pré-visualização compilada sem a classe oficial tcc.cls}\par}
+  {Porto Alegre, 2026\par}
+  \end{titlepage}}
+\makeatother
+% --------------------------------------------------
+
+\input{conteudo/macros}
+
+\author{Nicolas Pietro Moura da Silva}
+\title{Âncora: Questões Formativas Ancoradas no Material e Engajamento Visual Medido no Navegador para o Estudo Autônomo}
+      {Âncora: Material-Grounded Formative Questions and In-Browser Visual Engagement Measurement for Self-Directed Study}
+\orientador{Otávio Parraga}
+
+\begin{document}
+\maketitle
+
+\input{conteudo/resumo}
+
+\listoffigures
+\listoftables
+\tableofcontents
+
+\input{conteudo/cap1-introducao}
+\input{conteudo/cap2-fundamentacao}
+\input{conteudo/cap3-ferramenta}
+\input{conteudo/cap4-metodologia}
+\input{conteudo/cap5-resultados}
+\input{conteudo/cap6-discussao}
+\input{conteudo/cap7-conclusao}
+
+\bibliographystyle{alpha}
+\bibliography{tcc-bib}
+
+\appendix
+\input{conteudo/apendices}
+
+\end{document}

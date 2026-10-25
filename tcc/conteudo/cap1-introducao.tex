@@ -1,0 +1,74 @@
+% ===========================================================================
+\chapter{\label{chap:intro}Introdução}
+
+\sigla{API}{Application Programming Interface}
+\sigla{DSR}{Design Science Research}
+\sigla{EAR}{Eye Aspect Ratio}
+\sigla{FPS}{Quadros por segundo}
+\sigla{IC}{Intervalo de confiança}
+\sigla{ITS}{Intelligent Tutoring System}
+\sigla{LGPD}{Lei Geral de Proteção de Dados Pessoais}
+\sigla{LLM}{Large Language Model}
+\sigla{LMS}{Learning Management System}
+\sigla{ONNX}{Open Neural Network Exchange}
+\sigla{QP}{Questão de pesquisa}
+\sigla{RAG}{Retrieval-Augmented Generation}
+\sigla{SPA}{Single Page Application}
+\sigla{WASM}{WebAssembly}
+
+Parte crescente do estudo universitário acontece fora da sala de aula, diante de uma tela e sem supervisão: o estudante abre o PDF da disciplina, lê, e decide sozinho quando entendeu o bastante. Esse formato exige autorregulação, isto é, a capacidade de planejar o estudo, monitorar o próprio progresso e corrigir o rumo quando algo falha. O problema é que duas das informações de que o estudante precisa para se autorregular são justamente as mais difíceis de obter sozinho: se ele está de fato prestando atenção e se de fato compreendeu o que leu.
+
+A primeira informação falha porque a dispersão é, em grande parte, invisível para quem se dispersa. A mente pode abandonar a tarefa enquanto os olhos continuam percorrendo o texto, e muitas vezes a pessoa só percebe o desvio depois que ele aconteceu. Some-se a isso o \estr{smartphone} ao alcance da mão, que transforma o estudo em uma alternância contínua entre tarefas, com custo para o desempenho. A segunda informação falha porque a leitura passiva produz uma sensação de fluência que não equivale a compreensão. Sem uma verificação externa, o estudante descobre as lacunas tarde, em geral na prova.
+
+A pesquisa educacional oferece uma resposta conhecida para os dois problemas: perguntas. Responder a questões sobre o conteúdo não apenas mede a aprendizagem, mas a fortalece, e perguntas intercaladas ao longo de uma aula em vídeo chegaram a reduzir a divagação mental e a melhorar o aprendizado em comparação com a mesma aula sem perguntas \cite{SKS13}. O efeito é maior quando cada resposta recebe um retorno que explica o porquê, princípio central da avaliação formativa. O obstáculo sempre foi a produção: escrever boas perguntas para cada material é trabalhoso, e no estudo autônomo não há professor para escrevê-las. O Capítulo~\ref{chap:fund} retoma essa literatura em detalhe.
+
+\section{O problema: duas promessas tecnológicas pouco verificadas}
+
+Dois avanços recentes parecem remover esse obstáculo. O primeiro são os modelos de linguagem de grande porte (\estr{Large Language Models}, LLMs), capazes de gerar perguntas de múltipla escolha sobre praticamente qualquer texto. O segundo é a visão computacional executada no próprio navegador, que permite estimar, a partir da câmera de um \estr{notebook} comum, se o rosto está voltado para a tela e se há um celular no campo de visão. Juntos, eles sugerem uma ferramenta que devolve ao estudante as duas informações que lhe faltam.
+
+Cada avanço, porém, traz uma promessa que costuma ser aceita sem medição. Os LLMs produzem texto fluente que pode ser falso ou não sustentado pela fonte, fenômeno chamado de alucinação. A resposta usual é a geração aumentada por recuperação (\estr{Retrieval-Augmented Generation}, RAG), em que o modelo gera a partir de trechos recuperados de uma base de documentos. A recuperação reduz a alucinação, mas não a elimina, o que torna necessário medir, e não presumir, com que frequência a resposta correta de uma questão gerada está de fato sustentada pelo trecho que a originou. A revisão sistemática de Kurdi et al.\ \cite{Kur20} sobre geração automática de questões para fins educacionais chega a uma conclusão nessa direção: o campo precisa de relatos experimentais mais completos e de métricas de avaliação mais padronizadas para julgar a qualidade das questões geradas.
+
+A promessa da visão computacional é outra: a de que o monitoramento por câmera pode respeitar a privacidade. Imagens do rosto são dados pessoais e, quando processadas para extrair características faciais, podem ser enquadradas como dados biométricos, que a Lei Geral de Proteção de Dados Pessoais (LGPD) classifica como sensíveis. Ferramentas de monitoramento costumam tratar a privacidade como política, com termos de uso e promessas de descarte. O princípio de \estr{privacy by design} propõe o contrário: que a proteção esteja embutida na própria arquitetura. Executar toda a inferência no navegador realiza esse princípio, porque a imagem nunca sai do dispositivo, mas cria um problema técnico pouco discutido: o desempenho passa a depender do \estr{hardware} de cada estudante, que é heterogêneo e, muitas vezes, modesto.
+
+\section{Lacuna e proposta}
+
+A lacuna que este trabalho endereça, portanto, não é a ausência de geradores de questões nem de detectores de engajamento, ambos amplamente estudados. É a ausência de evidência sobre o funcionamento conjunto dessas técnicas nas condições reais do estudo autônomo: material trazido pelo próprio estudante, que ninguém revisa; computadores comuns, sem placa de vídeo dedicada; e a exigência de que nenhuma imagem trafegue pela rede. Nessas condições, a qualidade das questões não pode depender de revisão humana, o desempenho não pode pressupor \estr{hardware} potente, e a privacidade precisa ser uma propriedade verificável do sistema, não uma declaração.
+
+Para investigar essa lacuna, este trabalho constrói e avalia o \ferramenta, uma ferramenta de apoio ao estudo autônomo. O nome resume a ideia central do artefato: ancorar as perguntas no material do estudante e ancorar a atenção do estudante no material. No \ferramenta, o próprio estudante envia os PDFs de uma disciplina; o sistema fragmenta o texto, indexa os fragmentos em um banco vetorial e gera questões de múltipla escolha, cada uma a partir de um fragmento específico, que fica guardado junto à questão como sua fonte. Durante a sessão de estudo, a câmera é processada localmente para estimar um indicador de engajamento visual, o \fs, e para contar eventos de uso do celular. Um painel devolve ao estudante o cruzamento entre engajamento e desempenho, como instrumento de automonitoramento.
+
+É importante delimitar desde já o que o \ferramenta não é. Ele não é um Ambiente Virtual de Aprendizagem no sentido institucional do termo, como Moodle ou Canvas, que integram gestão de turmas, papéis de professor e aluno, entrega de atividades e comunicação. Não há professor no sistema. O \ferramenta ocupa o espaço que esses ambientes deixam descoberto: o momento em que o estudante, sozinho, estuda o material.
+
+\section{Questões de pesquisa}
+
+A pergunta que orienta o trabalho pode ser enunciada em uma frase:
+
+\begin{quote}
+\emph{É viável, em computadores comuns de estudantes, combinar a geração de questões formativas ancoradas no material de estudo com a medição de engajamento visual executada inteiramente no navegador, e com que qualidade, desempenho e garantia de privacidade essa combinação funciona?}
+\end{quote}
+
+Essa pergunta se desdobra em quatro questões de pesquisa (QPs), cada uma ligada a uma das promessas discutidas acima:
+
+\begin{itemize}
+  \item \textbf{QP1 (qualidade das questões):} em que proporção as questões geradas a partir de fragmentos do material são ancoradas no fragmento, corretas e bem construídas, e quanto dessa qualidade se deve à ancoragem, em comparação com gerar sem o fragmento-fonte?
+  \item \textbf{QP2 (viabilidade no navegador):} com que desempenho a detecção facial e a detecção de celular executam no navegador em \estr{hardware} heterogêneo, e com que frequência o sistema precisa recorrer ao modo degradado?
+  \item \textbf{QP3 (validade do indicador):} o \fs e o contador de eventos de celular respondem como esperado a estados comportamentais conhecidos, e quão sensíveis são aos parâmetros escolhidos?
+  \item \textbf{QP4 (privacidade verificável):} é possível demonstrar, por um procedimento automatizado e repetível, que nenhuma imagem da câmera deixa o navegador durante uma sessão de estudo?
+\end{itemize}
+
+As QPs foram escolhidas antes do método, a partir dos riscos que a proposta assume, e não a partir do que é mais fácil de medir. Por isso, nenhuma delas pergunta se a ferramenta melhora o aprendizado. Essa pergunta é importante, mas exige um estudo com participantes e medidas de retenção que está fora do escopo deste trabalho; o Apêndice~\ref{ap:usuarios} descreve como ele pode ser conduzido a partir dos resultados obtidos aqui.
+
+\section{Contribuições}
+
+Este é um trabalho de proposta de artefato com avaliação técnica, conduzido segundo a \estr{Design Science Research} (DSR) \cite{HMPR04}. Suas contribuições são:
+
+\begin{enumerate}
+  \item \textbf{Uma arquitetura de apoio ao estudo autônomo} que integra geração de questões a partir de fragmentos do material, estimativa de engajamento visual no cliente e um painel de automonitoramento, com degradação graciosa como decisão de projeto: quando o computador não suporta o detector de celular, a sessão continua apenas com os indicadores faciais.
+  \item \textbf{Um protocolo de avaliação técnica reproduzível e sem participantes humanos}, baseado em um corpus fixo de materiais, em um vídeo roteirizado e rotulado que substitui a câmera, e em uma página de \estr{benchmark} que pode ser executada em qualquer navegador.
+  \item \textbf{Um conjunto de métricas de qualidade para geradores de questões} que complementa a inspeção humana com verificações automáticas: ancoragem lexical, vieses de posição e de extensão da alternativa correta, duplicatas, falhas de formato e custo por questão.
+  \item \textbf{A privacidade tratada como propriedade testável}, por meio de um teste automatizado que audita todo o tráfego de rede de uma sessão.
+  \item \textbf{Uma análise explícita dos limites da abordagem}, em particular o fato de o \fs ser um indicador indireto de atenção e de o detector de celular depender do \estr{hardware}.
+\end{enumerate}
+
+\section{Organização do texto}
+
+O Capítulo~\ref{chap:fund} revisa a literatura em torno de quatro controvérsias: o valor das perguntas para a atenção e a aprendizagem, a confiabilidade das questões geradas por LLMs, a validade da medição automática de engajamento e a privacidade no monitoramento por câmera. O Capítulo~\ref{chap:ferramenta} descreve o \ferramenta, com a definição formal de seus indicadores. O Capítulo~\ref{chap:metodo} apresenta o protocolo de avaliação de cada QP. O Capítulo~\ref{chap:resultados} reporta os resultados, o Capítulo~\ref{chap:discussao} os interpreta e discute as limitações, e o Capítulo~\ref{chap:conclusao} retoma a pergunta inicial e propõe trabalhos futuros.

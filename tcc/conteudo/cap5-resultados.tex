@@ -1,0 +1,226 @@
+% ===========================================================================
+\chapter{\label{chap:resultados}Resultados}
+
+% Caixa para figuras ainda não produzidas
+\newcommand{\figurapendente}[1]{%
+  \fbox{\begin{minipage}[c][4.2cm][c]{0.9\textwidth}\centering\small
+  \textcolor{red!70!black}{\textbf{[FIGURA PENDENTE]}}\\[2pt] #1\end{minipage}}}
+
+Este capítulo reporta os resultados na ordem das QPs. Nas tabelas, a marca \rr\ indica uma célula a preencher com o resultado da coleta. Os resultados são apresentados sem interpretá-los além do necessário para lê-los; a interpretação é feita no Capítulo~\ref{chap:discussao}. Todos os números provêm da coleta descrita no Capítulo~\ref{chap:metodo}, e cada tabela e figura indica sua fonte. \resultado{período de coleta, versão (\estr{commit}) avaliada e eventuais desvios em relação ao protocolo, com justificativa}.
+
+\section{QP1: qualidade das questões}
+
+\subsection{Concordância entre avaliadores}
+
+\resultado{kappa de Cohen entre os dois avaliadores, antes da discussão, para cada critério C1 a C5, com a interpretação pelas faixas usuais de concordância; número de divergências resolvidas por discussão}. Esse resultado precede os demais porque condiciona sua leitura: se a concordância for baixa em algum critério, as proporções desse critério devem ser tratadas com cautela.
+
+\subsection{Proporção de questões aceitáveis}
+
+A Tabela~\ref{tab:qp1-principal} apresenta, para cada condição, a proporção de questões que atendem a cada critério e ao critério conjunto de aceitabilidade.
+
+\begin{table}[htbp]
+\centering
+\caption{Qualidade das questões por condição, segundo o consenso dos avaliadores ($n = 90$ questões por condição). Valores em porcentagem, com IC de 95\% de Wilson entre colchetes. C1 conta apenas ``sim''; C3 conta questões com ao menos dois distratores plausíveis. Fonte: dados da coleta da QP1.}
+\label{tab:qp1-principal}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Condição & C1 Ancoragem & C2 Correção & C3 Distratores & C4 Clareza & Aceitável \\
+\midrule
+P (proposta) & \rr & \rr & \rr & \rr & \rr \\
+P+V (vizinhos) & \rr & \rr & \rr & \rr & \rr \\
+S (sem fonte) & \rr & \rr & \rr & \rr & \rr \\
+R (regras) & \rr & \rr & \rr & \rr & \rr \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\resultado{parágrafo que responde diretamente à QP1: a proporção de aceitáveis da condição P atingiu ou não o critério prévio de 80\%; qual critério mais reprovou questões}.
+
+A Tabela~\ref{tab:qp1-comparacoes} apresenta as comparações pareadas.
+
+\begin{table}[htbp]
+\centering
+\caption{Comparações pareadas da proporção de questões aceitáveis. Diferença em pontos percentuais, com IC de 95\% por \estr{bootstrap} pareado (10.000 reamostragens); $p$ do teste de McNemar com correção de Holm. $b$ e $c$ são os pares discordantes (aceitável só na primeira condição; só na segunda). Fonte: dados da coleta da QP1.}
+\label{tab:qp1-comparacoes}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Comparação & Diferença (p.p.) & IC 95\% & $b$ / $c$ & $p$ (Holm) \\
+\midrule
+P $-$ S (efeito da ancoragem) & \rr & \rr & \rr & \rr \\
+P $-$ R (efeito do LLM) & \rr & \rr & \rr & \rr \\
+P $-$ P+V (efeito dos vizinhos) & \rr & \rr & \rr & \rr \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\resultado{parágrafo com a magnitude de cada diferença e sua incerteza, incluindo explicitamente os resultados nulos ou contrários ao esperado, por exemplo se S não diferir de P em correção, ou se P+V reduzir a ancoragem}.
+
+A Figura~\ref{fig:qp1-material} desagrega a proporção de aceitáveis da condição P por material, para verificar se o resultado agregado esconde diferenças entre tipos de texto.
+
+\begin{figure}[htbp]
+\centering
+\figurapendente{Gráfico de pontos com barras de erro. Eixo horizontal: proporção de questões aceitáveis (0 a 100\%). Eixo vertical: os três materiais do corpus, mais uma linha para o total. Um ponto por material e condição (P, P+V, S, R), com cores distintas, e barra horizontal para o IC de 95\% de Wilson ($n = 30$ por material). Linha vertical tracejada em 80\% marcando o critério prévio.}
+\caption{Proporção de questões aceitáveis por material e condição, com IC de 95\%. A linha tracejada marca o critério de 80\% fixado antes da coleta. Fonte: dados da coleta da QP1.}
+\label{fig:qp1-material}
+\end{figure}
+
+\resultado{descrição do que a figura mostra, em especial se o material em formato de apresentação teve desempenho inferior}.
+
+\subsection{Nível cognitivo e defeitos típicos}
+
+\resultado{distribuição das questões aceitáveis da condição P entre os níveis lembrar, compreender e aplicar ou superior, em porcentagem; comparação com a condição S}. \resultado{os três defeitos mais frequentes nas questões não aceitáveis, com um exemplo real de cada, apresentado junto com o fragmento-fonte, e sua frequência}.
+
+\subsection{Métricas automáticas}
+
+A Tabela~\ref{tab:qp1-auto} reúne as métricas automáticas da condição P.
+
+\begin{table}[htbp]
+\centering
+\caption{Métricas automáticas das questões da condição P. Fonte: registros de geração e \estr{scripts} de análise da QP1.}
+\label{tab:qp1-auto}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X l}
+\toprule
+Métrica & Valor \\
+\midrule
+Chamadas com JSON inválido ou incompleto & \resultado{\% (n)} \\
+Chamadas interrompidas por limite de requisições & \resultado{\% (n)} \\
+Distribuição da posição da correta (A/B/C/D) & \resultado{\%; $\chi^2$, $p$} \\
+Correta estritamente mais longa & \resultado{\% (esperado $\approx 25\%$)} \\
+Pares de enunciados quase duplicados (cosseno $> 0{,}9$) & \resultado{n pares} \\
+Latência por lote de 5 questões, mediana [p95] & \resultado{s} \\
+Tempo até a primeira questão, mediana [p95] & \resultado{s} \\
+\estr{Tokens} por questão (entrada / saída), mediana & \rr \\
+Custo estimado por 100 questões & \resultado{US\$, data da tabela de preços} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\resultado{concordância (kappa) entre o juiz automático e o consenso humano no critério C1, e entre a ancoragem lexical dicotomizada e o consenso humano; indicar se algum método automático atingiu concordância ao menos substancial}.
+
+\subsection{Sensibilidade e variabilidade}
+
+\resultado{proporção de aceitáveis da condição P nos 30 fragmentos refragmentados com 600, 900 e 1.200 caracteres, com IC; amplitude da proporção de aceitáveis entre as três repetições da geração}.
+
+\section{QP2: viabilidade no navegador}
+
+\resultado{número de configurações testadas e sua composição (processadores, presença de placa de vídeo, navegadores)}. A Tabela~\ref{tab:qp2} reporta as medidas por configuração.
+
+\begin{table}[htbp]
+\centering
+\caption{Desempenho da visão computacional por configuração de \estr{hardware} e navegador, processando o mesmo vídeo de cinco minutos. FPS: quadros por segundo da detecção facial, mediana [percentil 5]. Quadro p95: tempo de processamento por quadro, percentil 95. YOLO: latência mediana [p95]. TL/min: tarefas longas por minuto. Latências em milissegundos. Modo: C (completo), SC (sem celular), SV (sem câmera). Fonte: execuções da página de \estr{benchmark}.}
+\label{tab:qp2}
+\scriptsize
+\begin{tabular}{llcccccc}
+\toprule
+Config. & CPU / naveg. & Núcl. & FPS [p5] & Quadro p95 & YOLO [p95] & TL/min & Modo \\
+\midrule
+M1 & \rr & \rr & \rr & \rr & \rr & \rr & \rr \\
+M2 & \rr & \rr & \rr & \rr & \rr & \rr & \rr \\
+\multicolumn{8}{c}{\resultado{demais configurações}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\figurapendente{Dois gráficos de dispersão lado a lado. (a) Eixo horizontal: núcleos lógicos (escala linear); eixo vertical: FPS mediano da detecção facial; linha horizontal tracejada em 5 FPS (critério). (b) Mesmo eixo horizontal; eixo vertical: latência p95 do YOLO em ms, escala logarítmica; linha horizontal tracejada em 1.200 ms (critério). Um ponto por configuração, com forma indicando o navegador.}
+\caption{Desempenho da detecção facial (a) e da detecção de celular (b) em função do número de núcleos lógicos. As linhas tracejadas marcam os critérios de viabilidade fixados antes da coleta. Fonte: execuções da página de \estr{benchmark}.}
+\label{fig:qp2}
+\end{figure}
+
+\resultado{parágrafo que responde diretamente à QP2: proporção de configurações em que a detecção facial foi operável e em que o YOLO foi viável, com IC de Wilson; proporção de configurações que acionaram o modo degradado; em que tipo de configuração a viabilidade se rompeu}. \resultado{tarefas longas e memória: se o processamento prejudicou a responsividade em alguma configuração}.
+
+\section{QP3: validade do indicador}
+
+A Tabela~\ref{tab:qp3} apresenta o desempenho do \fs e do detector de celular com os parâmetros padrão.
+
+\begin{table}[htbp]
+\centering
+\caption{Desempenho do indicador de engajamento visual por condição de gravação, com os parâmetros padrão. AB: acurácia balanceada; Sens.: sensibilidade; Espec.: especificidade, calculadas por quadro, excluídas as transições. FE: falsos eventos de celular. Atraso: mediana entre o início de um segmento desatento e a queda do \fs abaixo de 50. Fonte: registros por quadro das gravações da QP3.}
+\label{tab:qp3}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Condição de gravação & AB & Sens. & Espec. & Atraso (s) & FE/10 min \\
+\midrule
+Iluminação boa, sem óculos & \rr & \rr & \rr & \rr & \rr \\
+Iluminação boa, com óculos & \rr & \rr & \rr & \rr & \rr \\
+Iluminação fraca, sem óculos & \rr & \rr & \rr & \rr & \rr \\
+Iluminação fraca, com óculos & \rr & \rr & \rr & \rr & \rr \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\figurapendente{Série temporal de uma gravação completa (condição iluminação boa, sem óculos). Eixo horizontal: tempo em segundos (0 a cerca de 240). Eixo vertical: \fs de 0 a 100. Faixas de fundo sombreadas indicam os segmentos S1 a S8, rotulados, em cinza claro os atentos esperados e em cinza escuro os desatentos. Marcadores triangulares no topo indicam os instantes em que eventos de celular foram contados.}
+\caption{Comportamento do \fs e dos eventos de celular ao longo de uma gravação do roteiro, com os segmentos esperados ao fundo. Fonte: registro por quadro da gravação na condição iluminação boa, sem óculos.}
+\label{fig:qp3-serie}
+\end{figure}
+
+\resultado{parágrafo que responde diretamente à QP3: acurácia balanceada média e sua variação entre condições; segmentos em que o indicador mais errou (esperado: S4, olhar para baixo, e S2, olhadas breves); revocação de eventos em S7 e S8 e taxa de falsos eventos}.
+
+\subsection{Sensibilidade aos parâmetros}
+
+\begin{figure}[htbp]
+\centering
+\figurapendente{Painel com sete pequenos gráficos de linha, um por parâmetro variado (limiar calibrado vs.\ fixo; fator do limiar de EAR; tolerâncias de direção; período $g$; janela $\Delta$; limiar do celular; $k$). Eixo horizontal: valores testados do parâmetro, com o valor padrão destacado. Eixo vertical: acurácia balanceada (para parâmetros do \fs) ou revocação de eventos e falsos eventos por 10 min (para parâmetros do celular). Uma linha por condição de gravação.}
+\caption{Sensibilidade das métricas da QP3 a cada parâmetro, variando um por vez em torno dos valores padrão. Fonte: recálculo sobre os registros por quadro das gravações.}
+\label{fig:qp3-sens}
+\end{figure}
+
+\resultado{efeito da calibração individual: diferença de acurácia balanceada entre limiar calibrado e fixo, por condição; parâmetros aos quais o indicador se mostrou mais sensível; se o valor padrão ficou próximo do melhor valor testado}.
+
+\section{QP4: privacidade}
+
+\resultado{número de requisições registradas na sessão automatizada, por destino; número de requisições com conteúdo de imagem na versão avaliada (critério: zero); número de envios detectados na versão com vazamento, sobre o total de envios inseridos}. A Tabela~\ref{tab:qp4} lista os destinos contatados.
+
+\begin{table}[htbp]
+\centering
+\caption{Destinos de rede contatados durante uma sessão completa, com a direção e o conteúdo do tráfego. Fonte: registro de tráfego do teste automatizado da QP4.}
+\label{tab:qp4}
+\small
+\begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X c c}
+\toprule
+Destino & Finalidade & Requisições & Envia imagem? \\
+\midrule
+Servidor da aplicação & PDFs, respostas, telemetria agregada & \rr & \rr \\
+Provedor do LLM (a partir do servidor) & Fragmentos de texto para geração & \rr & \rr \\
+CDN dos arquivos do MediaPipe & Download de código WASM e pesos & \rr & \rr \\
+\multicolumn{4}{c}{\resultado{demais destinos, se houver}} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\resultado{resultado da revisão estática: ocorrências de chamadas capazes de serializar imagens e sua justificativa}.
+
+\section{Usabilidade e acessibilidade}
+
+\resultado{número de problemas encontrados na inspeção heurística, por heurística e por severidade, e os três de maior severidade descritos}. \resultado{pontuação de acessibilidade do Lighthouse e número de violações do axe-core por tela, com os tipos mais frequentes}.
+
+\section{Síntese}
+
+A Tabela~\ref{tab:sintese-resultados} confronta cada critério fixado antes da coleta com o resultado obtido.
+
+\begin{table}[htbp]
+\centering
+\caption{Critérios fixados antes da coleta e resultados obtidos. Fonte: Tabelas~\ref{tab:qp1-principal} a~\ref{tab:qp4}.}
+\label{tab:sintese-resultados}
+\small
+\begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X c}
+\toprule
+QP & Critério & Resultado & Atendido? \\
+\midrule
+QP1 & $\ge 80\%$ de questões aceitáveis na condição P & \rr & \rr \\
+QP2 & FPS mediano $\ge 5$ e tempo por quadro p95 $\le 100$ ms & \resultado{proporção de configurações} & \rr \\
+QP2 & Latência p95 do YOLO $\le 1{,}2$ s & \resultado{proporção de configurações} & \rr \\
+QP2 & Primeira questão em $\le 10$ s & \rr & \rr \\
+QP3 & Acurácia balanceada $\ge 0{,}80$ & \rr & \rr \\
+QP3 & Revocação de eventos $\ge 0{,}80$; $\le 1$ falso evento/10 min & \rr & \rr \\
+QP4 & Zero imagens enviadas; controle positivo detectado & \rr & \rr \\
+\bottomrule
+\end{tabularx}
+\end{table}

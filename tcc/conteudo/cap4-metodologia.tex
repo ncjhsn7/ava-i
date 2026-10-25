@@ -1,0 +1,212 @@
+% ===========================================================================
+\chapter{\label{chap:metodo}Metodologia de Avaliação}
+
+Este capítulo descreve como cada QP é respondida. A Seção~\ref{sec:abordagem} justifica a abordagem de avaliação técnica frente às alternativas. A Seção~\ref{sec:instrumentacao} lista a instrumentação acrescentada ao protótipo para a coleta. As Seções~\ref{sec:met-qp1} a~\ref{sec:met-qp4} apresentam, para cada QP, os dados, as condições comparadas, as métricas, os critérios definidos antes da coleta e as análises. A Seção~\ref{sec:met-usab} descreve a avaliação complementar de usabilidade e acessibilidade, e a Seção~\ref{sec:reprod} reúne o necessário para reproduzir o estudo. A Tabela~\ref{tab:sintese-metodo} resume o desenho.
+
+\begin{table}[htbp]
+\centering
+\caption{Síntese do desenho de avaliação: para cada QP, os dados usados, as comparações, a métrica principal e o critério de viabilidade fixado antes da coleta. Fonte: elaborada pelo autor.}
+\label{tab:sintese-metodo}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{1.6cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X}
+\toprule
+QP & Dados & Comparações & Métrica principal & Critério prévio \\
+\midrule
+QP1 Qualidade & 90 fragmentos de 3 materiais abertos & Proposta vs.\ linha de base sem fonte vs.\ linha de base por regras; ablação com vizinhos & Proporção de questões aceitáveis (IC 95\%) & $\ge 80\%$ aceitáveis na proposta \\
+QP2 Viabilidade & Vídeo rotulado executado em 10 a 20 configurações de \estr{hardware} & Entre configurações e navegadores & FPS da detecção facial; latência p95 do YOLO & FPS mediano $\ge 5$; p95 $\le 1{,}2$ s \\
+QP3 Validade & Vídeo roteirizado em 4 condições de gravação & Parâmetros padrão vs.\ variações (sensibilidade) & Acurácia balanceada por quadro; revocação de eventos & $\ge 0{,}80$ em ambas \\
+QP4 Privacidade & Tráfego de rede de sessões automatizadas & Versão avaliada vs.\ controle positivo com vazamento & Requisições com conteúdo de imagem & Zero na versão avaliada; detecção no controle \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{\label{sec:abordagem}Abordagem: avaliação técnica em \estr{Design Science Research}}
+
+A \estr{Design Science Research} (DSR) produz conhecimento construindo um artefato que resolve um problema relevante e avaliando-o com rigor. O processo proposto por Peffers et al.\ \cite{PTR07} organiza essa atividade em etapas: identificar o problema, definir os objetivos da solução, projetar e desenvolver o artefato, demonstrá-lo, avaliá-lo e comunicar os resultados. Os Capítulos~\ref{chap:intro} a~\ref{chap:ferramenta} cobriram as quatro primeiras etapas; este capítulo trata da avaliação.
+
+Hevner et al.\ admitem diferentes famílias de métodos de avaliação em DSR: observacionais, analíticos, experimentais, de teste e descritivos. A escolha deste trabalho recai sobre testes controlados do artefato, por três razões. A primeira é a correspondência com as QPs: as quatro dizem respeito a propriedades do artefato (qualidade do que ele gera, desempenho, validade de um indicador, fluxo de dados), e não ao comportamento de quem o usa. A segunda é a reprodutibilidade: um corpus fixo e um vídeo gravado permitem repetir cada medição, variar um parâmetro por vez e comparar versões, o que um estudo com participantes não permite. A terceira é a viabilidade: um estudo com participantes exigiria aprovação prévia do Comitê de Ética em Pesquisa, recrutamento e uma amostra maior do que a alcançável no calendário de um trabalho de conclusão para ter poder estatístico sobre efeitos de aprendizagem.
+
+A alternativa descartada, um experimento com estudantes comparando sessões com e sem questões, responderia a uma pergunta diferente e mais ambiciosa, sobre o efeito da ferramenta na atenção ou no aprendizado. Essa pergunta só faz sentido depois que as propriedades básicas do artefato estiverem estabelecidas: não há por que medir o efeito de questões cuja qualidade é desconhecida, nem de um indicador cuja validade não foi verificada. A avaliação técnica é, portanto, pré-requisito do estudo com usuários, cujo desenho está no Apêndice~\ref{ap:usuarios}.
+
+\section{\label{sec:instrumentacao}Instrumentação acrescentada ao protótipo}
+
+A coleta exige quatro acréscimos ao protótipo descrito no Capítulo~\ref{chap:ferramenta}, todos sem efeito sobre o comportamento observado pelo estudante:
+
+\begin{enumerate}
+  \item \textbf{Registro de geração:} cada chamada ao LLM passa a registrar o modelo, a condição experimental, o fragmento-fonte, a latência, os \estr{tokens} de entrada e saída, se a resposta foi um JSON válido e, em caso de erro, o código de erro (incluindo limite de requisições).
+  \item \textbf{Registro do modo da sessão:} o sucesso ou a falha da inicialização de cada modelo, o motivo da falha e a latência das primeiras inferências passam a ser gravados nos metadados da sessão, distinguindo os modos completo, sem celular e sem câmera (Seção~\ref{sec:degradacao}).
+  \item \textbf{Página de \estr{benchmark}:} uma rota que reproduz um arquivo de vídeo em vez da câmera, executa os dois modelos por um tempo fixo e exibe, ao final, as medidas da QP2 em um arquivo que o próprio operador pode salvar.
+  \item \textbf{Registro por quadro, apenas local:} no modo de \estr{benchmark}, as grandezas brutas de cada quadro (presença do rosto, EAR, \estr{yaw}, \estr{pitch}, pontuação $c_j$ do celular) são exportadas para um arquivo local, nunca enviado ao servidor. Esse registro permite recalcular o \fs com outros parâmetros sem reexecutar os modelos (Seção~\ref{sec:met-qp3}).
+\end{enumerate}
+
+\section{\label{sec:met-qp1}QP1: qualidade das questões geradas}
+
+\subsection{Corpus}
+
+O corpus é formado por três materiais didáticos de licença aberta, de áreas distintas, para evitar que os resultados reflitam um único estilo de texto: \definir{três capítulos de livros-texto abertos, com título, área, licença, número de páginas e formato (texto corrido ou apresentação de \estr{slides})}. Materiais abertos permitem publicar o corpus junto com o código. A inclusão de ao menos um material em formato de apresentação é deliberada: \estr{slides} produzem texto fragmentado, com listas e títulos soltos, que é o caso mais difícil para a extração e para a geração.
+
+De cada material, são sorteados 30 fragmentos entre os que passam pelo filtro de utilidade (Seção~\ref{sec:mod1}), com semente fixa, totalizando 90 fragmentos. O tamanho da amostra foi escolhido pela precisão desejada: para uma proporção de questões aceitáveis próxima de 80\%, 90 questões por condição produzem um intervalo de confiança de 95\% pelo método de Wilson \cite{Wil27} com meia-largura de aproximadamente 8 pontos percentuais, suficiente para distinguir uma condição com 80\% de outra com 60\%, mas não diferenças pequenas. Essa limitação é assumida.
+
+\subsection{Condições comparadas}
+
+Para cada um dos 90 fragmentos, são geradas questões em quatro condições, o que produz um desenho pareado: a mesma unidade (o fragmento) é avaliada em todas as condições, e as diferenças entre condições não se confundem com diferenças entre fragmentos.
+
+\begin{itemize}
+  \item \textbf{P (proposta):} geração a partir do fragmento-fonte isolado, como na versão avaliada.
+  \item \textbf{P+V (ablação com vizinhos):} geração a partir do fragmento-fonte acrescido dos dois fragmentos mais próximos no banco vetorial, identificados no prompt como contexto. Mede se o contexto adicional melhora a questão ou a desloca para fora do fragmento-fonte.
+  \item \textbf{S (linha de base sem fonte):} o mesmo modelo, com o mesmo formato de saída, recebe apenas o título do material e o tema do fragmento, que é extraído por um procedimento automático \definir{procedimento de extração do tema, p.\ ex.\ o título de seção mais próximo}, mas não o texto do fragmento. Isola a contribuição da ancoragem: se S produzir questões tão boas quanto P, a ancoragem não estará agregando qualidade mensurável.
+  \item \textbf{R (linha de base por regras):} o gerador extrativo, sem LLM, que o protótipo usa quando nenhum modelo está configurado. Ele escolhe termos salientes do fragmento, constrói o enunciado a partir da frase que os contém e usa outros termos do mesmo material como distratores. Representa o que se obtém sem modelo de linguagem.
+\end{itemize}
+
+A linha de base S é deliberadamente forte: ela usa o mesmo modelo, o mesmo prompt de formato e informação temática suficiente para gerar uma questão plausível sobre o assunto. A comparação justa não é entre um LLM e nada, mas entre gerar a partir do material e gerar a partir do conhecimento prévio do modelo sobre o mesmo tema.
+
+\subsection{Inspeção humana}
+
+As 360 questões (90 fragmentos $\times$ 4 condições) são avaliadas por dois avaliadores com domínio dos materiais, o autor e o orientador, com uma rubrica definida antes da geração e baseada nas diretrizes de redação de itens de Haladyna et al.\ (Seção~\ref{sec:geracao}):
+
+\begin{itemize}
+  \item \textbf{C1, ancoragem:} a alternativa correta é sustentada pelo fragmento-fonte? (sim / parcialmente / não)
+  \item \textbf{C2, correção:} a alternativa indicada como correta está correta, e é a única correta? (sim / não)
+  \item \textbf{C3, distratores:} quantos dos três distratores são plausíveis para quem não domina o conteúdo? (0 a 3)
+  \item \textbf{C4, clareza:} o enunciado é inequívoco e gramaticalmente correto? (sim / não)
+  \item \textbf{C5, nível cognitivo:} em qual nível da taxonomia revisada de Bloom \cite{AK01} a questão se situa? (lembrar / compreender / aplicar ou superior)
+\end{itemize}
+
+Uma questão é considerada \textbf{aceitável} quando C1 = sim, C2 = sim, C4 = sim e C3 $\ge 2$. A definição é conjuntiva porque uma questão falha, para o estudante, se falhar em qualquer desses aspectos: um gabarito errado ensina o erro, e uma questão não ancorada cobra o que o material não contém. C5 é descritivo e não entra no critério.
+
+Para evitar que o conhecimento da condição influencie o julgamento, as questões são apresentadas aos avaliadores em ordem aleatória, sem identificação da condição, cada uma acompanhada apenas do seu fragmento-fonte. Na condição S, que não usou o fragmento, a ancoragem é avaliada contra o fragmento sorteado, o que é justamente o que se quer medir. Cada avaliador julga todas as questões de forma independente. A concordância é medida pelo coeficiente kappa de Cohen \cite{Coh60}, calculado antes de qualquer discussão e interpretado pelas faixas usuais de concordância (fraca, moderada, substancial, quase perfeita). As divergências são então discutidas até o consenso, e as análises usam as classificações de consenso.
+
+\subsection{Métricas automáticas}
+
+Além da inspeção, métricas automáticas são calculadas sobre todas as questões. Elas têm duas funções: detectar defeitos que a inspeção individual não revela, como vieses que só aparecem no agregado, e verificar se parte da inspeção pode ser automatizada em uso real, onde não há revisão humana.
+
+\begin{itemize}
+  \item \textbf{Ancoragem lexical:} proporção dos termos de conteúdo (excluídas palavras funcionais) da alternativa correta que aparecem no fragmento-fonte. É uma aproximação grosseira, que não reconhece paráfrases.
+  \item \textbf{Juiz automático:} um LLM de família diferente da do gerador, para mitigar o viés de autopreferência discutido na Seção~\ref{sec:geracao}, recebe o fragmento, a questão e a pergunta C1 da rubrica. As alternativas são apresentadas em duas ordens, e a classificação só é aceita se for igual nas duas, para mitigar o viés de posição. \definir{modelo usado como juiz}
+  \item \textbf{Falhas de formato:} proporção de chamadas com JSON inválido, com menos de quatro alternativas ou encerradas por erro, incluindo limite de requisições.
+  \item \textbf{Viés de posição:} distribuição da posição da alternativa correta, que deve ser uniforme após o embaralhamento; testada pelo qui-quadrado de aderência.
+  \item \textbf{Viés de extensão:} proporção de questões em que a alternativa correta é estritamente a mais longa. Sem viés, o valor esperado é próximo de 25\%; valores muito maiores indicam uma pista que permite acertar sem conhecer o conteúdo.
+  \item \textbf{Duplicatas:} pares de questões do mesmo material cujos enunciados têm similaridade de cosseno acima de 0,9 entre seus \estr{embeddings}.
+  \item \textbf{Custo e latência:} latência por chamada e por lote, \estr{tokens} por questão e custo estimado pela tabela de preços do provedor na data da coleta.
+\end{itemize}
+
+\subsection{Análise}
+
+Para cada condição, reporta-se a proporção de questões aceitáveis e de cada critério, com intervalo de confiança de 95\% de Wilson. As comparações de interesse são P contra S (efeito da ancoragem), P contra R (efeito do LLM) e P contra P+V (efeito do contexto adicional). Como os dados são pareados e binários, cada comparação usa o teste de McNemar \cite{McN47}, com correção de Holm para as três comparações, e reporta a diferença de proporções com intervalo de confiança por \estr{bootstrap} pareado como medida de tamanho de efeito. A concordância entre o juiz automático e o consenso humano no critério C1 é reportada por kappa, assim como a concordância entre a ancoragem lexical, dicotomizada por um limiar escolhido no primeiro material e aplicado aos outros dois, e o consenso humano.
+
+\subsection{Sensibilidade e variabilidade}
+
+Duas análises verificam se as conclusões dependem de escolhas arbitrárias. Na primeira, um subconjunto de 30 fragmentos é refragmentado com tamanhos-alvo de 600 e 1.200 caracteres, e as questões da condição P são geradas e inspecionadas novamente. Na segunda, como a geração a temperatura 0,8 não é determinística, as questões da condição P de 30 fragmentos são geradas três vezes, e a variação da proporção de aceitáveis entre repetições estima a variabilidade atribuível ao sorteio do modelo. Os critérios métricos do teste principal são reaplicados sem alteração.
+
+\section{\label{sec:met-qp2}QP2: viabilidade da visão computacional no navegador}
+
+\subsection{Procedimento}
+
+A QP2 mede o desempenho dos dois modelos em computadores reais sem que nenhuma pessoa seja filmada. Para isso, a página de \estr{benchmark} (Seção~\ref{sec:instrumentacao}) substitui a câmera por um vídeo pré-gravado: o mesmo vídeo roteirizado da QP3, reproduzido do disco. O uso de um vídeo fixo tem duas vantagens: a carga de trabalho é idêntica em todas as máquinas, e as medidas de desempenho não dependem da câmera ou do ambiente de cada operador.
+
+Cada execução dura cinco minutos e segue os mesmos passos da sessão real: carregar os modelos, calibrar durante cinco segundos e processar o vídeo com os parâmetros da Tabela~\ref{tab:parametros}. Ao final, a página exibe as medidas e oferece um arquivo para o operador salvar e enviar.
+
+\subsection{Amostra de configurações}
+
+A amostra é de conveniência e busca variedade, não representatividade estatística: de 10 a 20 configurações, entendidas como a combinação de computador e navegador, incluindo as máquinas do autor, computadores de laboratório da universidade \definir{laboratórios e autorização de uso} e \estr{notebooks} de colegas que executem voluntariamente a página. Busca-se cobrir ao menos: processadores de entrada, intermediários e de alto desempenho; computadores com e sem placa de vídeo dedicada; e os navegadores Chrome, Edge e Firefox. Os dados coletados descrevem a máquina, não a pessoa: número de núcleos lógicos, memória informada pelo navegador, modelo do processador quando declarado, navegador e versão, disponibilidade de WebGL e de instruções vetoriais em WASM.
+
+\subsection{Métricas e critérios}
+
+\begin{itemize}
+  \item \textbf{Inicialização:} sucesso ou falha de cada modelo e tempo até o primeiro resultado.
+  \item \textbf{Detecção facial:} taxa de quadros processados por segundo (FPS), com mediana e percentil 5, e tempo de processamento por quadro, com mediana e percentil 95.
+  \item \textbf{Detecção de celular:} latência por inferência, com mediana e percentil 95, e intervalo efetivo entre inferências.
+  \item \textbf{Responsividade da interface:} número de tarefas longas da \estr{thread} principal, definidas pelo navegador como execuções acima de 50 ms, por minuto.
+  \item \textbf{Memória:} uso de memória do \estr{heap} de JavaScript ao final da execução, quando o navegador o informa.
+  \item \textbf{Modo resultante:} completo, sem celular ou sem câmera, segundo a regra da Seção~\ref{sec:degradacao}.
+  \item \textbf{Tempo até a primeira questão:} medido no servidor, do pedido do primeiro lote à sua entrega, em sessões da QP1.
+\end{itemize}
+
+Os critérios de viabilidade foram derivados dos próprios parâmetros do sistema e de limites clássicos de tempo de resposta, e fixados antes da coleta. A detecção facial é considerada operável com FPS mediano de pelo menos 5, porque, com o período de tolerância $g = 2{,}5$ s, essa taxa garante ao menos 12 quadros por período, e a janela de 8 s passa a conter ao menos 40 quadros, o que dá ao \fs resolução melhor que 2,5 pontos. O percentil 95 do tempo por quadro deve ficar abaixo de 100 ms, limite abaixo do qual a resposta de um sistema é percebida como instantânea \cite{Nie93}, para que o processamento não prejudique a leitura. O detector de celular é considerado viável quando o percentil 95 de sua latência não excede o intervalo de agendamento de 1,2 s; acima disso, o intervalo efetivo cresce, e a duração mínima de um evento aumenta com ele. O tempo até a primeira questão deve ficar abaixo de 10 s, limite para manter a atenção do usuário na tarefa.
+
+\subsection{Análise}
+
+Os resultados são reportados por configuração, em tabela, e sintetizados em gráficos de dispersão que relacionam o número de núcleos lógicos ao FPS mediano da detecção facial e à latência mediana do YOLO. A proporção de configurações em que cada modelo é viável e a proporção em que o modo degradado é acionado são reportadas com IC de 95\% de Wilson. Com amostras dessa ordem, os intervalos serão largos; por isso, a análise privilegia a descrição de onde a viabilidade se rompe (quais combinações de \estr{hardware} e navegador) em vez de uma estimativa populacional.
+
+\section{\label{sec:met-qp3}QP3: validade do indicador de engajamento}
+
+\subsection{Roteiro e gravação}
+
+A validade do \fs é verificada contra estados comportamentais conhecidos, representados pelo próprio autor diante da câmera, seguindo um roteiro. Uma página auxiliar exibe as instruções na tela e registra automaticamente o instante de início e de fim de cada segmento, o que produz os rótulos sem anotação manual. O roteiro tem oito segmentos, cada um com um estado esperado (Tabela~\ref{tab:roteiro}).
+
+\begin{table}[htbp]
+\centering
+\caption{Roteiro do vídeo rotulado. ``Atento esperado'' é o estado que o \fs deveria refletir; ``Evento esperado'' indica se o detector de celular deveria registrar um evento. Fonte: elaborada pelo autor.}
+\label{tab:roteiro}
+\small
+\begin{tabularx}{\textwidth}{c >{\raggedright\arraybackslash}X c c c}
+\toprule
+Seg. & Comportamento & Duração & Atento esperado & Evento esperado \\
+\midrule
+S1 & Leitura na tela, postura natural & 60 s & Sim & Não \\
+S2 & Leitura com piscadas e olhadas breves ($<2$ s) ao teclado & 45 s & Sim & Não \\
+S3 & Olhar lateral sustentado, como para outra tela & 20 s & Não & Não \\
+S4 & Olhar para baixo sustentado, como para um caderno & 20 s & Não & Não \\
+S5 & Olhos fechados & 15 s & Não & Não \\
+S6 & Rosto fora do campo da câmera & 15 s & Não & Não \\
+S7 & Uso do celular na mão, olhando para ele & 30 s & Não & Sim \\
+S8 & Celular sobre a mesa, visível, olhar na tela & 30 s & Sim & Sim \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Dois segmentos merecem justificativa. O S2 testa o período de tolerância: piscadas e olhadas curtas não devem derrubar o indicador. O S8 separa a presença do celular do seu uso: como o detector reconhece o objeto, e não o comportamento, espera-se que ele conte um evento mesmo com o estudante atento. O resultado de S8 não mede um erro do detector, mas delimita o que o indicador significa.
+
+O roteiro é gravado em quatro condições, combinando iluminação adequada ou fraca e uso ou não de óculos, fatores que afetam a detecção dos pontos dos olhos. Cada gravação tem cerca de quatro minutos. Os segmentos são separados por intervalos de transição, e os quadros situados até 1 s antes ou depois de cada fronteira são excluídos das métricas, para que imprecisões na mudança de comportamento não sejam contadas como erro do indicador.
+
+\subsection{Métricas e critérios}
+
+O estado final $s_i$ de cada quadro (Equação~\ref{eq:tolerancia}) é comparado ao estado esperado do segmento. Como os segmentos desatentos são mais curtos que os atentos, a métrica principal é a acurácia balanceada, média entre a sensibilidade (proporção de quadros desatentos corretamente identificados) e a especificidade (proporção de quadros atentos corretamente identificados), que não é inflada pelo desbalanceamento. Reportam-se também a matriz de confusão por segmento e o atraso de detecção, definido como o tempo entre o início de um segmento desatento e o primeiro instante em que o \fs cai abaixo de 50.
+
+Para o detector de celular, as métricas são a revocação por evento, proporção dos segmentos S7 e S8 em que ao menos um evento foi contado, e a taxa de falsos eventos, número de eventos contados nos segmentos S1 a S6 por dez minutos de vídeo.
+
+Os critérios fixados antes da coleta são acurácia balanceada de pelo menos 0,80 com os parâmetros padrão, revocação de eventos de pelo menos 0,80 e no máximo um falso evento por dez minutos. São critérios de projeto, e não padrões da literatura: correspondem a um indicador que acerta, em média, quatro de cada cinco quadros de cada classe e que não interrompe o estudante com alarmes frequentes.
+
+\subsection{Sensibilidade aos parâmetros}
+
+Como o registro por quadro guarda as grandezas brutas, o \fs pode ser recalculado para qualquer combinação de parâmetros sem reprocessar o vídeo. A análise varia um parâmetro por vez, mantendo os demais no padrão:
+
+\begin{itemize}
+  \item limiar de EAR: calibrado por sessão (padrão) contra um limiar fixo, igual à média dos limiares calibrados das quatro gravações;
+  \item fator do limiar de EAR: 0,60; 0,72; 0,85;
+  \item tolerâncias de direção da cabeça: metade, padrão e uma vez e meia os valores de $\tau_y$ e $\tau_p$;
+  \item período de tolerância $g$: 0; 1,5; 2,5; 4 s;
+  \item janela $\Delta$: 4; 8; 16 s;
+  \item limiar de pontuação do celular: 0,25; 0,35; 0,50;
+  \item inferências consecutivas $k$: 1, 2, 3.
+\end{itemize}
+
+A comparação entre limiar calibrado e fixo é a ablação mais importante, porque testa uma decisão de projeto defendida na Seção~\ref{sec:engajamento}: a de que a variação individual da EAR exige calibração.
+
+\section{\label{sec:met-qp4}QP4: verificação automatizada da privacidade}
+
+\subsection{Teste de tráfego}
+
+Um teste automatizado, escrito com a biblioteca Playwright, executa uma sessão completa em um navegador Chromium cuja câmera é substituída pelo vídeo roteirizado: envia um PDF, inicia uma sessão com câmera, responde a dez questões, permanece cinco minutos na leitura e encerra a sessão. Durante toda a execução, o teste intercepta e registra todas as requisições de rede, com destino, método, tamanho e corpo.
+
+Sobre esse registro, o teste verifica três propriedades. Primeiro, que toda requisição dirigida ao servidor da aplicação corresponda a um \estr{endpoint} esperado e contenha apenas os campos previstos em seu esquema. Segundo, que nenhum corpo de requisição, para qualquer destino, contenha assinaturas de imagem (cabeçalhos binários de JPEG, PNG ou WebP, ou o prefixo \texttt{data:image}) nem sequências em base64 com mais de 1 KB. Terceiro, que o tamanho das requisições de telemetria seja compatível com o esquema, da ordem de centenas de \estr{bytes} por lote. O teste também produz a lista de todos os domínios externos contatados, com a finalidade de cada um.
+
+\subsection{Controle positivo}
+
+Um teste que não encontra vazamento só é informativo se for capaz de encontrá-lo quando ele existe. Por isso, o mesmo teste é executado contra uma versão modificada do cliente que, deliberadamente, envia ao servidor um quadro da câmera codificado em JPEG a cada minuto. O critério da QP4 exige duas coisas: zero requisições com conteúdo de imagem na versão avaliada e detecção de todos os envios na versão com vazamento.
+
+\subsection{Revisão estática}
+
+Como complemento, o código do cliente é inspecionado em busca de todas as chamadas capazes de serializar imagens (\texttt{toDataURL}, \texttt{toBlob}, \texttt{getImageData}) e de todas as chamadas de rede, e cada ocorrência é justificada. O uso de \texttt{getImageData}, por exemplo, é esperado: é assim que o quadro é convertido no tensor de entrada do YOLO, dentro do navegador.
+
+\section{\label{sec:met-usab}Avaliação complementar: usabilidade e acessibilidade}
+
+Embora não seja objeto de uma QP, a interface é avaliada por dois métodos de inspeção, que não envolvem participantes na condição de sujeitos. O primeiro é a inspeção heurística com as dez heurísticas de Nielsen \cite{Nie94}, aplicada a três tarefas: enviar um material, realizar uma sessão de estudo com câmera e interpretar o painel. Cada problema encontrado é registrado com a heurística violada e uma severidade de 0 a 4. O número recomendado de avaliadores é de três a cinco; a composição do grupo é \definir{avaliadores da inspeção heurística e confirmação, com o orientador, de que a inspeção por colegas não exige submissão ao CEP}. O segundo método é a auditoria automática de acessibilidade das quatro telas principais com as ferramentas Lighthouse e axe-core, que verificam critérios das Diretrizes de Acessibilidade para Conteúdo Web (WCAG) 2.1 \cite{W3C18}, como contraste, rótulos de controles e navegação por teclado.
+
+\section{\label{sec:reprod}Ambiente e reprodutibilidade}
+
+O servidor executa em Python 3 com FastAPI, SQLAlchemy, pypdf, o divisor de texto do LangChain e ChromaDB; o cliente, em Angular 19, com MediaPipe Tasks Vision e ONNX Runtime Web \referencia{documentação ou artigo de referência do ONNX Runtime}. As versões exatas de todas as dependências são fixadas no repositório. \definir{sistema operacional, processador e memória da máquina que executa o servidor e a geração}.
+
+Todos os sorteios usam sementes fixas registradas. O repositório público \definir{endereço do repositório} contém o código na versão avaliada, os três materiais do corpus, as questões geradas com suas classificações, os registros de geração, os arquivos das execuções de \estr{benchmark}, os registros por quadro das gravações e os \estr{scripts} de análise. As gravações de vídeo, por conterem a imagem do autor, não são publicadas; os registros por quadro, que contêm apenas grandezas numéricas, permitem reproduzir todas as análises da QP3.
+
+O próximo capítulo apresenta os resultados na mesma ordem das QPs.

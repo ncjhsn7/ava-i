@@ -1,0 +1,64 @@
+%----------------------------------------------------------------------------------
+% Âncora - Trabalho de Conclusão (classe tcc.cls da PUCRS)
+% Mantenha no mesmo diretório: tcc.cls, tcc-alpha.bst (e demais .bst),
+% o arquivo de referências tcc-bib.bib, a pasta figuras/ e a pasta conteudo/.
+% Compilar: pdflatex tcc-pucrs -> bibtex tcc-pucrs -> pdflatex -> pdflatex
+%
+% O corpo do texto está em conteudo/*.tex e é compartilhado com
+% tcc-preview.tex (versão que compila sem a tcc.cls, só para conferência).
+%----------------------------------------------------------------------------------
+\documentclass[portuguese,oneside]{tcc}
+
+\usepackage{graphicx}
+\graphicspath{{figuras/}}
+\usepackage{xspace}
+\usepackage{xcolor}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{array}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+
+\input{conteudo/macros}
+
+%----------------------------------------------------------------
+% Metadados obrigatórios
+%----------------------------------------------------------------
+\author{Nicolas Pietro Moura da Silva}
+
+\title{Âncora: Questões Formativas Ancoradas no Material e Engajamento Visual Medido no Navegador para o Estudo Autônomo}
+      {Âncora: Material-Grounded Formative Questions and In-Browser Visual Engagement Measurement for Self-Directed Study}
+
+\tipotrabalho{\ptci}  % [DEFINIR] trocar pela macro de TCC II da tcc.cls, se for o caso
+\curso{\cc}           % Ciência da Computação
+\orientador{Otávio Parraga}
+
+\begin{document}
+
+\input{conteudo/resumo}
+
+\listoffigures
+\listoftables
+\listofacronyms
+\tableofcontents
+
+\input{conteudo/cap1-introducao}
+\input{conteudo/cap2-fundamentacao}
+\input{conteudo/cap3-ferramenta}
+\input{conteudo/cap4-metodologia}
+\input{conteudo/cap5-resultados}
+\input{conteudo/cap6-discussao}
+\input{conteudo/cap7-conclusao}
+
+\bibliographystyle{tcc-alpha}
+\bibliography{tcc-bib}
+
+\appendix
+\input{conteudo/apendices}
+
+\end{document}

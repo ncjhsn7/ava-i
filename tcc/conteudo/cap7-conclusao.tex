@@ -1,0 +1,25 @@
+% ===========================================================================
+\chapter{\label{chap:conclusao}Conclusão}
+
+Este trabalho partiu de uma pergunta: é viável, em computadores comuns de estudantes, combinar a geração de questões formativas ancoradas no material de estudo com a medição de engajamento visual executada inteiramente no navegador, e com que qualidade, desempenho e garantia de privacidade essa combinação funciona? A pergunta nasceu de duas promessas que a literatura costuma aceitar sem medição: a de que ancorar a geração no material garante questões confiáveis, e a de que o monitoramento por câmera pode respeitar a privacidade.
+
+Para respondê-la, o trabalho construiu o \ferramenta, uma ferramenta de apoio ao estudo autônomo em que o estudante envia seus PDFs, responde a questões geradas a partir de fragmentos desse material e acompanha, em um painel de automonitoramento, indicadores de engajamento visual calculados no próprio navegador. Em vez de avaliar a ferramenta com participantes antes de conhecer suas propriedades básicas, o trabalho propôs e executou um protocolo técnico reproduzível, com uma QP para cada risco assumido.
+
+\resultado{parágrafo de resposta à pergunta de pesquisa, uma frase por QP, sem repetir números da Tabela~\ref{tab:sintese-resultados}: a ancoragem agregou ou não qualidade mensurável; em que tipo de \estr{hardware} a execução no navegador se sustenta; em que condições o \fs corresponde aos estados esperados e quais são seus pontos cegos; se a ausência de imagens no tráfego foi demonstrada}.
+
+Mais do que os números, que valem para o modelo, o corpus e as máquinas avaliados, o trabalho deixa três contribuições que se transferem: uma arquitetura que trata privacidade e heterogeneidade de \estr{hardware} como requisitos de projeto; um protocolo que avalia ferramentas educacionais com modelos de linguagem e sensoriamento no cliente antes de envolver estudantes; e um conjunto de métricas que tornam visíveis defeitos de geradores de questões que a inspeção individual não revela.
+
+\section{Trabalhos futuros}
+
+Os resultados abrem perguntas concretas, cada uma com um caminho de investigação definido:
+
+\begin{enumerate}
+  \item \textbf{Efeito sobre a aprendizagem.} Conduzir o estudo com participantes descrito no Apêndice~\ref{ap:usuarios}, que compara sessões com e sem questões intercaladas e mede retenção por um pós-teste independente, com aprovação do CEP. Os resultados deste trabalho definem as condições de uso (configurações de \estr{hardware} viáveis, parâmetros do indicador) em que esse estudo deve ser feito.
+  \item \textbf{Filtro automático de ancoragem.} Se o juiz automático tiver mostrado concordância suficiente com os avaliadores humanos, incorporá-lo ao fluxo de geração para descartar questões não ancoradas antes de exibi-las, e medir o efeito desse filtro sobre a proporção de questões aceitáveis e sobre a latência.
+  \item \textbf{Deslocar a fronteira de viabilidade.} Avaliar, com a mesma página de \estr{benchmark}, a execução do YOLO com aceleração gráfica (WebGPU) e com resoluções de entrada menores, medindo a troca entre latência e revocação de eventos.
+  \item \textbf{Validade em populações diversas.} Repetir a QP3 com gravações de pessoas com características faciais, acessórios e condições de iluminação diversas, com consentimento e aprovação ética, para verificar se o indicador apresenta erros sistemáticos para algum grupo.
+  \item \textbf{Integração a ambientes institucionais.} Investigar a integração do \ferramenta a ambientes como Moodle e Canvas pelo padrão \estr{Learning Tools Interoperability} \referencia{especificação IMS Global/1EdTech Learning Tools Interoperability (LTI)}, preservando a regra de que os indicadores pertencem ao estudante.
+  \item \textbf{Questões de maior nível cognitivo.} Investigar se instruções explícitas de nível cognitivo no prompt, a partir da taxonomia revisada de Bloom, aumentam a proporção de questões de compreensão e aplicação sem reduzir a ancoragem.
+\end{enumerate}
+
+O estudo autônomo continuará acontecendo diante de telas, com celulares ao alcance e sem professor ao lado. Ferramentas que ajudam o estudante a perceber a própria dispersão e as próprias lacunas podem ser úteis nesse cenário, desde que as perguntas que fazem sejam fiéis ao material e que o olhar que lançam sobre o estudante fique com ele. Este trabalho procurou mostrar como verificar essas duas condições.

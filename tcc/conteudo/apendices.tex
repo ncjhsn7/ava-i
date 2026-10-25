@@ -1,0 +1,115 @@
+% ===========================================================================
+\chapter{\label{ap:prompts}Prompts de geração}
+
+\section{Condição P: geração a partir do fragmento-fonte}
+
+Prompt usado na versão avaliada para gerar uma questão. O marcador \texttt{\{conteudo\}} é substituído pelo fragmento-fonte, truncado em 6.000 caracteres. Fonte: \texttt{backend/app/llm.py} do protótipo.
+
+\begin{small}
+\begin{verbatim}
+Você é um professor criando uma questão de estudo a partir de um
+material didático.
+Com base APENAS no trecho abaixo, crie 1 questão de múltipla escolha
+em português que avalie a compreensão do conteúdo.
+
+Requisitos:
+- Enunciado claro, contextualizado e respondível somente com o
+  conteúdo do trecho.
+- Exatamente 4 alternativas plausíveis, sendo apenas 1 correta.
+- Evite alternativas obviamente erradas ou sem sentido.
+
+TRECHO:
+{conteudo}
+
+Responda SOMENTE com um JSON válido no formato:
+{"pergunta": "...", "opcoes": ["...", "...", "...", "..."],
+ "correta": 0, "justificativa": "..."}
+\end{verbatim}
+\end{small}
+
+Na sessão de estudo, as questões são geradas em lotes com o prompt a seguir, em que \texttt{\{trechos\}} contém até cinco fragmentos numerados, cada um truncado em 1.500 caracteres, e \texttt{\{n\}} é o número de fragmentos.
+
+\begin{small}
+\begin{verbatim}
+Você é um professor criando questões de estudo a partir de um
+material didático.
+Para CADA trecho numerado abaixo, crie 1 questão de múltipla escolha
+em português (4 alternativas plausíveis, exatamente 1 correta),
+respondível apenas com o conteúdo daquele trecho.
+
+TRECHOS:
+{trechos}
+
+Responda SOMENTE com um JSON válido no formato, com exatamente {n}
+itens na ordem dos trechos:
+{"questoes": [{"pergunta": "...", "opcoes": ["...", "...", "...",
+ "..."], "correta": 0, "justificativa": "..."}]}
+\end{verbatim}
+\end{small}
+
+\section{Condições P+V e S}
+
+Na condição P+V, o prompt da condição P recebe, após o trecho, a seção a seguir, com os dois fragmentos mais próximos recuperados do banco vetorial; a instrução de ancoragem no trecho principal é mantida.
+
+\begin{small}
+\begin{verbatim}
+CONTEXTO ADICIONAL (trechos relacionados do mesmo material; use
+apenas para compreender o trecho principal, a questão deve ser
+respondível com o TRECHO):
+{vizinhos}
+\end{verbatim}
+\end{small}
+
+Na condição S, o bloco \texttt{TRECHO} é substituído pelas linhas abaixo, e a frase ``Com base APENAS no trecho abaixo'' é substituída por ``Sobre o tema abaixo''. \definir{validar a redação final das condições P+V e S antes da coleta e congelá-la no repositório}.
+
+\begin{small}
+\begin{verbatim}
+MATERIAL: {titulo_do_material}
+TEMA: {tema_do_fragmento}
+\end{verbatim}
+\end{small}
+
+% ===========================================================================
+\chapter{\label{ap:rubrica}Rubrica de inspeção das questões}
+
+A Tabela~\ref{tab:rubrica} apresenta a ficha usada por cada avaliador. O avaliador vê o fragmento-fonte, o enunciado, as quatro alternativas, a indicação da correta e a justificativa, sem a identificação da condição.
+
+\begin{table}[htbp]
+\centering
+\caption{Ficha de avaliação de cada questão, baseada nas diretrizes de Haladyna et al. e na taxonomia revisada de Bloom \cite{AK01}. Fonte: elaborada pelo autor.}
+\label{tab:rubrica}
+\small
+\begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{3.8cm}}
+\toprule
+Critério & Pergunta ao avaliador & Opções \\
+\midrule
+C1 & A alternativa indicada como correta é sustentada pelo fragmento-fonte, sem exigir conhecimento externo? & Sim / Parcialmente / Não \\
+C2 & A alternativa indicada como correta está correta, e nenhuma outra alternativa também está? & Sim / Não \\
+C3 & Quantos distratores seriam plausíveis para um estudante que não domina o conteúdo? & 0 / 1 / 2 / 3 \\
+C4 & O enunciado é inequívoco, gramaticalmente correto e compreensível sem ler as alternativas? & Sim / Não \\
+C5 & Qual o processo cognitivo principal exigido? & Lembrar / Compreender / Aplicar ou superior \\
+Obs. & Defeito observado, se houver (texto livre). & -- \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Antes da avaliação principal, os dois avaliadores classificam juntos dez questões de exemplo, geradas de um material fora do corpus, e discutem as divergências, para alinhar a interpretação dos critérios. Essas questões não entram nos resultados.
+
+% ===========================================================================
+\chapter{\label{ap:usuarios}Desenho do estudo com participantes (trabalho futuro)}
+
+Este apêndice descreve o estudo com participantes que dá continuidade a este trabalho, condicionado à aprovação do CEP-PUCRS. Ele incorpora as críticas feitas à versão anterior da proposta e parte dos resultados técnicos obtidos aqui.
+
+\section{Pergunta e desenho}
+
+A pergunta é se intercalar questões geradas pelo \ferramenta durante a leitura melhora a retenção do conteúdo, em comparação com a leitura do mesmo tipo de material sem questões. A comparação entre as duas condições se justifica porque a pergunta é sobre o efeito da intervenção; um desenho com uma única condição só permitiria estudar correlações dentro dela.
+
+O desenho é intra-sujeitos: cada participante realiza as duas condições, com materiais distintos e pareados em extensão e dificuldade, em ordem contrabalanceada e com pelo menos 24 horas de intervalo \cite{WRH12}. A variável dependente principal é o desempenho em um pós-teste de retenção aplicado uma semana após cada sessão, composto por questões escritas por um especialista, independentes das geradas pela ferramenta, para que o teste não favoreça a condição com questões. As variáveis secundárias são o \fs médio e os eventos de celular, apenas em configurações que a QP2 mostrou viáveis.
+
+\section{Participantes e análise}
+
+Estudantes voluntários maiores de 18 anos, com \estr{notebook} com câmera. O número de participantes deve ser definido por análise de poder a partir de um tamanho de efeito de referência \referencia{tamanho de efeito do efeito de testagem ou de perguntas intercaladas em estudos com materiais comparáveis, para cálculo de poder}. A comparação entre condições usa o teste de Wilcoxon para amostras pareadas, adequado a amostras pequenas sem pressuposto de normalidade \cite{Fie13}, com tamanho de efeito e intervalo de confiança. A relação entre \fs e taxa de acertos na condição com questões é explorada pela correlação de Spearman com intervalo de confiança por \estr{bootstrap}.
+
+\section{Instrumentos complementares}
+
+Ao final, cada participante responde à \estr{System Usability Scale} (SUS) \cite{Bro96}, interpretada segundo Bangor et al.\ \cite{BKM08}, e a três perguntas de benefício percebido: se a ferramenta contribuiu para o seu aprendizado, se as questões ajudaram a perceber o que não havia entendido e se usaria a ferramenta para estudar para uma prova. As respostas abertas são analisadas por análise de conteúdo \cite{Bar11}, com codificação pelo autor, revisão pelo orientador e registro das divergências e de sua resolução.

@@ -1,0 +1,83 @@
+% ===========================================================================
+\chapter{\label{chap:fund}Fundamentação e Trabalhos Relacionados}
+
+Este capítulo não percorre a literatura autor por autor. Ele se organiza em torno das quatro controvérsias que a proposta precisa enfrentar, na mesma ordem das QPs: por que intercalar perguntas no estudo (Seção~\ref{sec:perguntas}); se é possível confiar em perguntas geradas automaticamente (Seção~\ref{sec:geracao}); o que, de fato, a câmera consegue medir sobre a atenção (Seção~\ref{sec:engajamento}); e como conciliar esse monitoramento com a privacidade (Seção~\ref{sec:privacidade}). A Seção~\ref{sec:posicionamento} posiciona este trabalho em relação às categorias de sistemas existentes.
+
+\section{\label{sec:perguntas}Perguntas como intervenção: atenção, autorregulação e \estr{feedback}}
+
+A aprendizagem autorregulada descreve o estudante como agente que estabelece metas, escolhe estratégias, monitora o próprio desempenho e ajusta o comportamento a partir desse monitoramento \cite{Zim02}. O elo frágil desse ciclo é o monitoramento: para corrigir o rumo, o estudante precisa saber onde está, e a introspecção fornece essa informação de forma pouco confiável. Dois fenômenos ilustram o problema.
+
+O primeiro é a divagação mental. A mente pode se desacoplar da tarefa enquanto o comportamento externo continua aparentemente normal: os olhos seguem as linhas, mas o conteúdo não é processado \cite{SS06}. Esse fenômeno tem uma consequência que acompanha todo este trabalho: nenhum sinal externo, por mais preciso, observa diretamente a atenção. O segundo fenômeno é a interrupção por dispositivos. A ideia de que estudantes jovens conseguem fazer várias coisas ao mesmo tempo sem prejuízo não se sustenta; o que ocorre é alternância entre tarefas, com custo cognitivo a cada troca \cite{KDB17}. Para este trabalho, basta esse ponto: o uso do celular durante o estudo interrompe a tarefa, e essas interrupções são observáveis.
+
+Contra os dois fenômenos, a intervenção com melhor respaldo empírico é simples: fazer perguntas. Recuperar a informação da memória ao responder a uma pergunta produz retenção de longo prazo maior do que reestudar o mesmo conteúdo, fenômeno conhecido como efeito de testagem \cite{RK06}. O estudo de Szpunar, Khan e Schacter, citado na introdução, estende esse resultado à atenção: testes intercalados ao longo de uma aula \estr{online} reduziram a divagação mental e melhoraram o desempenho final. A literatura de avaliação formativa acrescenta uma condição de eficácia: o retorno deve informar não apenas se a resposta está certa, mas por quê, e o que falta para chegar ao objetivo \cite{BW98}. Em questões de estudo, entregar esse retorno logo após a resposta permite que o estudante corrija o entendimento enquanto o conteúdo ainda está presente.
+
+Essa convergência justifica o desenho do \ferramenta, que intercala leitura e questões com justificativa. Ela também desloca o problema: se as perguntas funcionam, a dificuldade passa a ser produzi-las em quantidade, para qualquer material, sem um professor. É o que leva à próxima seção.
+
+\section{\label{sec:geracao}Geração automática de questões: da regra ao modelo de linguagem}
+
+\subsection{Dos tutores inteligentes aos LLMs}
+
+Os Sistemas de Tutoria Inteligente (\estr{Intelligent Tutoring Systems}, ITS) já demonstraram que a tutoria por computador pode se aproximar da eficácia da tutoria humana individual. Na comparação feita por VanLehn \cite{Van11}, boa parte desse ganho vem da granularidade da interação: sistemas que intervêm passo a passo, com retorno imediato, superam os que só avaliam a resposta final. O custo desses sistemas estava na autoria: regras, modelos de domínio e bancos de questões eram escritos à mão para cada disciplina, o que limitava sua escala.
+
+A geração automática de questões tentou reduzir esse custo muito antes dos LLMs, com regras sintáticas, modelos de domínio e \estr{templates}. A revisão de Kurdi et al., já mencionada, cobre os trabalhos publicados entre 2015 e o início de 2019 e mostra um campo produtivo, mas com lacunas recorrentes: pouca atenção ao controle da dificuldade das questões, à variedade de formatos e ao \estr{feedback} oferecido ao estudante, além de procedimentos de avaliação pouco padronizados, que dificultam comparar estudos. A taxonomia revisada de Bloom, que distingue lembrar, compreender, aplicar, analisar, avaliar e criar, oferece uma linguagem para descrever o nível cognitivo das questões e é usada na rubrica deste trabalho (Seção~\ref{sec:met-qp1}).
+
+Os LLMs mudaram a escala do problema. Um único modelo, sem regras específicas de domínio, redige enunciados fluentes e distratores plausíveis para textos de qualquer área. Kasneci et al.\ \cite{KSS23}, ao discutir as oportunidades dessa capacidade para a educação, apontam com o mesmo peso seus desafios: a fragilidade inesperada das respostas, a presença de vieses, a necessidade de supervisão humana contínua e a possibilidade de uso indevido, o que exige de estudantes e professores a competência de verificar o que o modelo produz. No caso de questões de múltipla escolha, o risco tem forma precisa: um gabarito errado ensina o erro, e um enunciado que o material não sustenta cobra algo que o estudante não teve como aprender.
+
+\subsection{A promessa da ancoragem e o problema de medi-la}
+
+A alucinação, isto é, a geração de conteúdo não sustentado pela fonte ou pelos fatos, é uma propriedade conhecida dos modelos de linguagem. A geração aumentada por recuperação foi proposta justamente para tarefas que dependem de conhecimento externo: em vez de confiar apenas no que o modelo aprendeu no treinamento, a geração é condicionada a trechos recuperados de uma base de documentos \cite{LPP20}. O fluxo típico divide o texto-fonte em fragmentos (\estr{chunks}), converte-os em vetores numéricos (\estr{embeddings}) que aproximam trechos de significado semelhante, armazena-os em um banco vetorial e, na geração, recupera os fragmentos mais próximos da consulta. Para a geração de questões, esse arranjo tem uma vantagem clara: a ``verdade de referência'' é um conjunto delimitado e conhecido de documentos, o próprio material do estudante.
+
+A evidência, contudo, é de redução, e não de eliminação da alucinação \cite{SPC21}. Isso cria a primeira tensão que este trabalho investiga. De um lado, a ancoragem é apresentada como mecanismo de confiabilidade. De outro, a garantia de que a resposta correta de uma questão está no fragmento que a originou raramente é medida diretamente em contexto educacional \referencia{estudo(s) empírico(s) recentes que avaliem com especialistas a qualidade de questões de múltipla escolha geradas por LLMs para fins educacionais}. Medir exige um critério explícito de ancoragem e avaliadores que conheçam o material.
+
+Parte dessa medição pode ser automatizada. Uma possibilidade são métricas de fidelidade, que estimam se a resposta gerada é sustentada pelo contexto recuperado. Outra é usar um LLM como juiz da saída de outro modelo. Zheng et al.\ \cite{ZCS23} mostram que juízes fortes concordam com avaliadores humanos em proporção comparável à concordância entre os próprios humanos, mas documentam vieses: preferência pela resposta apresentada primeiro, por respostas mais longas e pelas respostas do próprio modelo. Esses vieses informam uma decisão metodológica deste trabalho: o juiz automático não substitui a inspeção humana; ele é comparado a ela e pertence a uma família de modelos diferente da do gerador.
+
+A qualidade de uma questão de múltipla escolha, por fim, não se esgota na ancoragem. As diretrizes clássicas de redação de itens incluem enunciado claro, uma única alternativa correta, distratores plausíveis e ausência de pistas, como a alternativa correta ser sistematicamente a mais longa \cite{HDR02}. Essas diretrizes fundamentam a rubrica de inspeção usada na QP1.
+
+\section{\label{sec:engajamento}Medir engajamento pela câmera: o que o sinal visual captura}
+
+\subsection{Engajamento como construto e seus sinais}
+
+Engajamento é um construto com componentes comportamentais, cognitivos e afetivos. D'Mello, Dieterle e Duckworth \cite{DDD17} defendem medi-lo de forma avançada, analítica e automatizada, a partir de sinais registrados durante a própria atividade de aprendizagem, em vez de depender apenas de questionários respondidos depois dela. Um limite, porém, decorre da própria natureza dos sinais: o que uma câmera observa é comportamento, e a relação entre comportamento visível e processamento cognitivo é indireta.
+
+Há evidência de que o rosto carrega informação útil. Observadores humanos conseguem julgar o engajamento de estudantes a partir de imagens do rosto com concordância razoável, e detectores automáticos treinados sobre expressões faciais aproximam esses julgamentos \cite{WSL14}. Sinais do olhar, capturados por rastreadores oculares comerciais, também foram usados para detectar divagação mental em salas de aula reais, durante o uso de um tutor inteligente \cite{HKM19}, e trabalhos mais recentes estimam níveis de engajamento a partir de pontos faciais extraídos com o MediaPipe e processados por redes neurais em grafos \cite{AK24}. Esses trabalhos avaliam seus modelos sobre conjuntos de dados gravados. Mesmo quando o método é leve o bastante para tempo real, como no caso de Abedi e Khan, a avaliação não mede o desempenho no navegador do estudante, em computadores heterogêneos.
+
+O \ferramenta faz uma escolha mais conservadora. Em vez de classificar ``engajamento'', ele mede uma grandeza observável e bem definida: a proporção do tempo em que o rosto está presente, voltado para a tela e com os olhos abertos. Chamamos essa grandeza de engajamento visual e a tratamos, explicitamente, como indicador indireto (\estr{proxy}) de atenção. A divagação mental descrita na Seção~\ref{sec:perguntas} é exatamente o caso em que esse indicador falha: olhos na tela, mente em outro lugar. Essa limitação não é resolvida, mas assumida e discutida (Seção~\ref{sec:limitacoes}).
+
+\subsection{Os blocos técnicos: pontos faciais, EAR e detecção de objetos}
+
+A estimativa do estado dos olhos se apoia na razão de aspecto do olho (\estr{Eye Aspect Ratio}, EAR), proposta por Soukupová e Čech \cite{SC16} para detectar piscadas a partir de seis pontos ao redor de cada olho. A EAR cai próximo de zero quando o olho fecha e é aproximadamente constante enquanto ele está aberto. O valor dessa constante, contudo, pode mudar com a anatomia de cada pessoa, a distância e o ângulo da câmera; esta é a hipótese de projeto que motiva, no \ferramenta, limiares calibrados individualmente, e que a QP3 testa. Os pontos faciais vêm do MediaPipe \cite{LTN19}, arcabouço do Google para \estr{pipelines} de percepção em tempo real, cujo modelo de malha facial estima centenas de pontos tridimensionais do rosto a partir de uma câmera comum \cite{KAGG19}.
+
+A detecção de celular usa a família YOLO (\estr{You Only Look Once}), que trata a detecção de objetos como uma única passagem de rede sobre a imagem inteira, o que a torna adequada a tempo real. A versão usada, YOLOv8 \cite{JCQ23}, é distribuída com pesos treinados no conjunto COCO, que inclui a classe ``celular''. A variante \estr{nano} é a menor da família e, exportada para o formato ONNX (\estr{Open Neural Network Exchange}), pode ser executada no navegador. O custo dessa escolha é que o desempenho passa a depender do processador de cada estudante, questão central da QP2.
+
+\section{\label{sec:privacidade}Privacidade: política ou arquitetura}
+
+A LGPD classifica o dado biométrico como dado pessoal sensível \cite{Bra18}, categoria sujeita a regras de tratamento mais restritas. Imagens do rosto, quando processadas para extrair características faciais, podem ser enquadradas nessa categoria. O \estr{privacy by design}, formulado por Cavoukian \cite{Cav09} em sete princípios, defende a privacidade como configuração padrão, embutida no projeto e não acrescentada depois. O guia da UNESCO para formuladores de políticas sobre inteligência artificial na educação \cite{UNE21} vai além e afirma que abordagens que rastreiam a atenção dos estudantes levantam questões de direitos humanos, em especial o direito à privacidade.
+
+O caso extremo desse risco é a supervisão remota de provas (\estr{online proctoring}), em que a câmera do estudante é gravada e analisada por terceiros, prática criticada por seus efeitos sobre a privacidade e sobre a relação de confiança entre instituição e estudante \referencia{análise ética ou empírica de ferramentas de supervisão remota de provas (online proctoring)}. O \ferramenta difere dela em três aspectos: o estudante é quem decide usar a câmera, os indicadores servem a ele próprio e não a uma autoridade, e nenhuma imagem sai do dispositivo.
+
+Esse último aspecto é o que torna a privacidade verificável. Uma política de descarte só pode ser auditada por quem tem acesso ao servidor; já a ausência de imagens no tráfego de rede pode ser testada por qualquer pessoa que execute a aplicação e inspecione suas requisições. A QP4 transforma essa observação em procedimento.
+
+\section{\label{sec:posicionamento}Posicionamento deste trabalho}
+
+A Tabela~\ref{tab:posicionamento} compara o \ferramenta com as categorias de sistemas discutidas neste capítulo. A comparação é feita por categoria, e não por sistema individual, e descreve características típicas relatadas nas fontes citadas; sistemas específicos podem se afastar delas.
+
+\begin{table}[htbp]
+\centering
+\caption{Características típicas de cada categoria de sistema, segundo as fontes citadas neste capítulo, comparadas às do \ferramenta. ``Sim'' indica que a característica é central na categoria; ``Parcial'', que aparece em parte dos sistemas; ``Não'', que não é objetivo da categoria.}
+\label{tab:posicionamento}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}X ccccc}
+\toprule
+Categoria & \makecell{Questões\\do material\\do aluno} & \makecell{Sinal de\\engajamento} & \makecell{Processa\\no cliente} & \makecell{Sem\\professor} & \makecell{Mede\\viabilidade\\em \estr{hardware}} \\
+\midrule
+Ambientes virtuais institucionais (LMS) & Não & Não & -- & Não & Não \\
+Tutores inteligentes clássicos & Não & Parcial & -- & Sim & Não \\
+Geração automática de questões & Sim & Não & -- & Parcial & Não \\
+Detecção de engajamento por visão & Não & Sim & Parcial & -- & Parcial \\
+Supervisão remota de provas & Não & Sim & Não & Não & Não \\
+\textbf{\ferramenta (este trabalho)} & \textbf{Sim} & \textbf{Sim} & \textbf{Sim} & \textbf{Sim} & \textbf{Sim} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+A tabela não sugere que o \ferramenta supere essas categorias em suas próprias finalidades; um LMS gerencia cursos, e um detector treinado em grandes conjuntos de dados classifica engajamento com mais nuance do que um indicador de olhar para a tela. O que a tabela mostra é que a combinação de questões sobre o material do próprio estudante, sinal de engajamento processado localmente e ausência de professor define um ponto de projeto pouco explorado, e que esse ponto impõe restrições próprias, que a literatura de cada categoria, isoladamente, não precisou enfrentar. O próximo capítulo descreve como o \ferramenta foi construído para respeitar essas restrições.
