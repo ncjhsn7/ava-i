@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { corCadeira, inicial } from '../cores';
 import { ApiService, Cadeira, Material, Pergunta } from '../services/api.service';
 
 @Component({
@@ -19,15 +20,26 @@ export class ProfessorComponent implements OnInit {
   preview = signal<Pergunta | null>(null);
   previewId = signal(0);
   carregando = signal(0);
-  nomeArquivo = signal('');
-  arquivo: File | null = null;
+  arquivos = signal<File[]>([]);
+  arrastando = signal(false);
+  progressoEnvio = signal('');
 
   ngOnInit() {
     this.recarregar();
   }
 
+  inicial = inicial;
+  corCadeira = corCadeira;
+
   recarregar() {
-    this.api.listarCadeiras().subscribe(cs => this.cadeiras.set(cs));
+    this.api.listarCadeiras().subscribe(cs => {
+      this.cadeiras.set(cs);
+      const atual = this.sel();
+      if (!atual || !cs.some(c => c.id === atual.id)) {
+        this.sel.set(null);
+        if (cs.length) this.abrir(cs[0]);
+      }
+    });
   }
 
   criarCadeira() {
@@ -35,16 +47,13 @@ export class ProfessorComponent implements OnInit {
     if (!nome) return;
     this.api.criarCadeira(nome).subscribe(c => {
       this.novoNome.set('');
-      this.recarregar();
       this.abrir(c);
+      this.recarregar();
     });
   }
 
   abrir(c: Cadeira) {
-    if (this.sel()?.id === c.id) {
-      this.sel.set(null);
-      return;
-    }
+    if (this.sel()?.id === c.id) return;
     this.sel.set(c);
     this.materiais.set([]);
     this.preview.set(null);
@@ -54,27 +63,84 @@ export class ProfessorComponent implements OnInit {
 
   selecionarArquivo(evento: Event) {
     const alvo = evento.target as HTMLInputElement;
-    this.arquivo = alvo.files?.[0] ?? null;
-    this.nomeArquivo.set(this.arquivo?.name ?? '');
+    this.adicionarArquivos(alvo.files);
+    alvo.value = ''; // permite escolher o mesmo arquivo de novo
+  }
+
+  aoArrastar(ev: DragEvent) {
+    ev.preventDefault();
+    if (!this.enviando()) this.arrastando.set(true);
+  }
+
+  aoSairArrasto(ev: DragEvent) {
+    const destino = ev.currentTarget as HTMLElement;
+    if (!destino.contains(ev.relatedTarget as Node)) this.arrastando.set(false);
+  }
+
+  aoSoltar(ev: DragEvent) {
+    ev.preventDefault();
+    this.arrastando.set(false);
+    if (!this.enviando()) this.adicionarArquivos(ev.dataTransfer?.files ?? null);
+  }
+
+  private adicionarArquivos(lista: FileList | null) {
+    if (!lista) return;
+    const todos = Array.from(lista);
+    const pdfs = todos.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    this.erro.set(pdfs.length < todos.length ? 'Alguns arquivos foram ignorados: só PDFs são aceitos.' : '');
+    const atuais = this.arquivos();
+    const novos = pdfs.filter(f => !atuais.some(a => a.name === f.name && a.size === f.size));
+    this.arquivos.set([...atuais, ...novos]);
+  }
+
+  removerArquivo(i: number) {
+    this.arquivos.update(lista => lista.filter((_, j) => j !== i));
+  }
+
+  tituloDoArquivo(f: File) {
+    return f.name.replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   enviar(c: Cadeira) {
-    if (!this.arquivo || !this.tituloMaterial().trim()) return;
+    const fila = [...this.arquivos()];
+    if (!fila.length || this.enviando()) return;
+    const tituloUnico = fila.length === 1 ? this.tituloMaterial().trim() : '';
+    const falhas: string[] = [];
     this.enviando.set(true);
     this.erro.set('');
-    this.api.criarMaterial(c.id, this.tituloMaterial().trim(), this.arquivo).subscribe({
-      next: () => {
+
+    const proximo = (i: number) => {
+      if (i >= fila.length) {
         this.enviando.set(false);
+        this.progressoEnvio.set('');
         this.tituloMaterial.set('');
-        this.arquivo = null;
-        this.nomeArquivo.set('');
+        this.arquivos.set(fila.filter(f => falhas.includes(f.name)));
+        if (falhas.length) this.erro.set(`Não foi possível processar: ${falhas.join(', ')}.`);
         this.api.listarMateriais(c.id).subscribe(ms => this.materiais.set(ms));
-      },
-      error: e => {
-        this.enviando.set(false);
-        this.erro.set(e.error?.detail ?? 'Falha ao processar o PDF. O backend está em localhost:8000?');
+        return;
       }
-    });
+      const f = fila[i];
+      this.progressoEnvio.set(fila.length > 1 ? `Processando ${i + 1} de ${fila.length}…` : 'Processando…');
+      this.api.criarMaterial(c.id, tituloUnico || this.tituloDoArquivo(f), f).subscribe({
+        next: () => {
+          this.api.listarMateriais(c.id).subscribe(ms => this.materiais.set(ms));
+          proximo(i + 1);
+        },
+        error: e => {
+          falhas.push(f.name);
+          if (e.status === 0) this.erro.set('O backend não respondeu. Ele está rodando em localhost:8000?');
+          proximo(i + 1);
+        }
+      });
+    };
+    proximo(0);
+  }
+
+  salvarArea(m: Material, ev: Event) {
+    const area = (ev.target as HTMLInputElement).value.trim();
+    if (!area || area === m.area) return;
+    this.api.definirArea(m.id, area).subscribe(atual =>
+      this.materiais.update(ms => ms.map(x => (x.id === atual.id ? atual : x))));
   }
 
   removerMaterial(m: Material) {

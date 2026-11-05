@@ -18,6 +18,7 @@ class Material(Base):
     cadeira_id: Mapped[int] = mapped_column(ForeignKey("cadeiras.id"))
     titulo: Mapped[str] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(20), default="processando")
+    area: Mapped[str] = mapped_column(String(80), default="")
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     cadeira: Mapped[Cadeira] = relationship(back_populates="materiais")
     questoes: Mapped[list["Questao"]] = relationship(back_populates="material", cascade="all, delete-orphan")
@@ -34,8 +35,15 @@ class Questao(Base):
     correta: Mapped[int] = mapped_column(Integer)
     justificativa: Mapped[str] = mapped_column(Text, default="")
     chunk_fonte: Mapped[str] = mapped_column(Text)
+    evidencia: Mapped[str] = mapped_column(Text, default="")
+    explicacoes: Mapped[list] = mapped_column(JSON, default=list)
+    pagina: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pendente")
     material: Mapped[Material] = relationship(back_populates="questoes")
+
+    @property
+    def material_titulo(self) -> str:
+        return self.material.titulo if self.material else ""
 
 
 class Sessao(Base):
@@ -64,3 +72,10 @@ class Resposta(Base):
     questao_id: Mapped[int] = mapped_column(ForeignKey("questoes.id"))
     escolhida: Mapped[int] = mapped_column(Integer)
     acertou: Mapped[bool] = mapped_column(Boolean)
+    criado_em: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+
+
+class Preferencia(Base):
+    __tablename__ = "preferencias"
+    chave: Mapped[str] = mapped_column(String(50), primary_key=True)
+    valor: Mapped[str] = mapped_column(String(200))

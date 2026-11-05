@@ -1,64 +1,84 @@
 <div class="view">
-  <div class="cabecalho">
-    <div class="selo">Questionário</div>
-    <h2>{{ fase() === 'selecao' && !cadeiraId() ? 'Escolha a cadeira' : (cadeiraNome() || 'Estudo') }}</h2>
-    <p>Escolha a cadeira, marque os PDFs que quer praticar e responda a um fluxo contínuo de questões geradas a partir deles.</p>
-  </div>
-
   @if (fase() === 'selecao') {
     @if (!cadeiraId()) {
+      <div class="cabecalho">
+        <h2>Estudar</h2>
+        <p>Escolha a cadeira que você quer praticar.</p>
+      </div>
       @if (cadeiras().length === 0) {
-        <p class="vazio">Nenhuma cadeira disponível. Peça ao professor para criar uma e enviar os PDFs.</p>
+        <p class="vazio">Nenhuma cadeira ainda. <a routerLink="/materiais">Crie uma em Materiais</a> e envie seus PDFs.</p>
       } @else {
         <div class="grade">
           @for (c of cadeiras(); track c.id) {
-            <button class="curso" (click)="abrirCadeira(c.id)">
-              <div class="banner" [style.background]="corCadeira(c.id)"><span>{{ inicial(c.nome) }}</span></div>
-              <div class="curso-nome">{{ c.nome }}</div>
+            <button class="curso" [style.--cor]="corCadeira(c.id)" (click)="abrirCadeira(c.id)">
+              <span class="inicial" aria-hidden="true">{{ inicial(c.nome) }}</span>
+              <span class="curso-nome">{{ c.nome }}</span>
             </button>
           }
         </div>
       }
     } @else {
       <button class="voltar" (click)="abrirCadeira(0)">← Todas as cadeiras</button>
+      <div class="cab-cadeira" [style.--cor]="corCadeira(cadeiraId())">
+        <span class="selo-cor" aria-hidden="true">{{ inicial(cadeiraNome() || '?') }}</span>
+        <h2>{{ cadeiraNome() }}</h2>
+      </div>
+
       @if (materiais().length === 0) {
-        <p class="vazio">Esta cadeira ainda não tem PDFs. Peça ao professor para enviar.</p>
+        <p class="vazio">Esta cadeira ainda não tem PDFs. <a routerLink="/materiais">Envie os PDFs em Materiais</a>.</p>
       } @else {
-        <div class="barra-sel">
-          <span>{{ selMateriais().size }} de {{ materiais().length }} PDFs</span>
-          <button class="btn-link" (click)="alternarTodos()">{{ selMateriais().size === materiais().length ? 'Limpar' : 'Selecionar todos' }}</button>
+        <div class="duas-colunas">
+          <section>
+            <div class="barra-sel">
+              <h3>Quais PDFs?</h3>
+              <button class="btn-link" (click)="alternarTodos()">{{ selMateriais().size === materiais().length ? 'Limpar seleção' : 'Selecionar todos' }}</button>
+            </div>
+            @for (m of materiais(); track m.id) {
+              <div class="pdf" role="checkbox" tabindex="0" [attr.aria-checked]="selMateriais().has(m.id)"
+                   (keydown.space)="$event.preventDefault(); alternar(m.id)" (keydown.enter)="alternar(m.id)"
+                   [class.marcado]="selMateriais().has(m.id)" (click)="alternar(m.id)">
+                <span class="check" aria-hidden="true"></span>
+                <span class="pdf-nome">{{ m.titulo }}</span>
+              </div>
+            }
+            <p class="contagem">{{ selMateriais().size }} de {{ materiais().length }} selecionados</p>
+          </section>
+
+          <section>
+            <h3 class="titulo-col">Como estudar?</h3>
+            <div class="modos">
+              <button class="modo destaque" (click)="comecar()" [disabled]="carregando() || selMateriais().size === 0">
+                <b>{{ carregando() ? 'Preparando…' : 'Responder questões' }}</b>
+                <span>Um fluxo contínuo de questões de múltipla escolha.</span>
+              </button>
+              <button class="modo" (click)="fase.set('prefs')" [disabled]="selMateriais().size === 0">
+                <b>Material de estudo</b>
+                <span>Um resumo explicado, no seu nível e no seu tempo.</span>
+              </button>
+              <button class="modo" (click)="revisarErros()">
+                <b>Revisar meus erros</b>
+                <span>Refaça as questões que você errou nesta cadeira.</span>
+              </button>
+            </div>
+            @if (selMateriais().size === 0) { <p class="dica">Marque ao menos um PDF para responder questões ou gerar material.</p> }
+            @if (erro()) { <p class="erro">{{ erro() }}</p> }
+          </section>
         </div>
-        @for (m of materiais(); track m.id) {
-          <div class="pdf" [class.marcado]="selMateriais().has(m.id)" (click)="alternar(m.id)">
-            <span class="check">{{ selMateriais().has(m.id) ? '✓' : '' }}</span>
-            <span class="pdf-nome">{{ m.titulo }}</span>
-          </div>
-        }
-        <div class="acoes-estudo">
-          <button class="btn btn-accent" (click)="comecar()" [disabled]="carregando() || selMateriais().size === 0">
-            {{ carregando() ? 'Preparando…' : 'Questionário' }}
-          </button>
-          <button class="btn btn-ghost" (click)="fase.set('prefs')" [disabled]="selMateriais().size === 0">
-            Material de estudo
-          </button>
-          <button class="btn btn-ghost" (click)="revisarErros()">Revisar meus erros</button>
-        </div>
-        @if (erro()) { <p class="erro">{{ erro() }}</p> }
       }
     }
   }
 
   @if (fase() === 'prefs') {
-    <button class="voltar" (click)="fase.set('selecao')">← PDFs</button>
+    <button class="voltar" (click)="fase.set('selecao')">← Voltar aos PDFs</button>
+    <div class="cabecalho"><h2>Material de estudo</h2><p>As respostas abaixo ajustam a explicação gerada.</p></div>
     @if (gerandoEstudo()) {
       <div class="cartao carregando-box">
         <div class="spinner"></div>
         <p class="carregando-titulo">Gerando seu material de estudo…</p>
-        <span class="carregando-dica">A IA está lendo os PDFs e montando a explicação. Pode levar alguns segundos.</span>
+        <span class="carregando-dica">Lendo os PDFs e montando a explicação. Pode levar alguns segundos.</span>
       </div>
     } @else {
       <div class="cartao prefs">
-        <p class="prefs-intro">Ajuste o material ao seu momento — as respostas guiam a explicação gerada.</p>
         <label>Seu nível na matéria
           <select [value]="nivel()" (change)="nivel.set($any($event.target).value)">
             <option value="Iniciante">Iniciante</option>
@@ -88,67 +108,89 @@
 
   @if (fase() === 'estudo') {
     <div class="topo-quiz">
-      <div class="contador">Material de estudo</div>
+      <div class="contador"><b>Material de estudo</b> · {{ cadeiraNome() }}</div>
       <div class="acoes-topo">
         @if (!monitorando()) {
           <button class="btn-link" (click)="ativarCamera()">Ativar foco (câmera)</button>
         } @else {
-          <span class="foco" [class.disperso]="focoExibido() !== null && focoExibido()! < 60">Foco: {{ focoExibido() ?? '—' }}</span>
+          <span class="foco" [class.disperso]="focoExibido() !== null && focoExibido()! < 60">Foco {{ focoExibido() ?? '—' }}</span>
         }
         <button class="btn btn-ghost btn-mini" (click)="sairEstudo()">Voltar</button>
       </div>
     </div>
-    <div class="cartao material">
+    <article class="cartao material">
       <pre class="texto-estudo">{{ materialTexto() }}</pre>
-    </div>
+    </article>
   }
 
   @if (fase() === 'quiz') {
     <div class="topo-quiz">
       <div class="contador">
         @if (modoRevisao()) { <span class="rev-tag">Revisão dos erros</span> }
-        <b>{{ respondidas() }}</b> respondidas · <b>{{ acertos() }}</b> certas
-        @if (respondidas() > 0) { <span class="pct">({{ pct() }}%)</span> }
+        <span class="num"><b>{{ respondidas() }}</b> respondidas</span>
+        <span class="num certas"><b>{{ acertos() }}</b> certas</span>
+        @if (respondidas() > 0) { <span class="pct">{{ pct() }}%</span> }
+        @if (sequencia() >= 2) { <span class="num seq" [class.quente]="sequencia() >= 5">🔥 <b>{{ sequencia() }}</b> seguidas</span> }
+        <span class="num meta-hoje" [class.batida]="respondidasHoje() >= metaDiaria()" title="Meta diária"><b>{{ respondidasHoje() }}</b>/{{ metaDiaria() }} hoje</span>
       </div>
       <div class="acoes-topo">
         @if (!monitorando()) {
-          <button class="btn-link" (click)="ativarCamera()">Ativar câmera</button>
+          <button class="btn-link" (click)="ativarCamera()">Ativar foco (câmera)</button>
         } @else {
-          <span class="foco">Foco: {{ focoExibido() ?? '—' }}</span>
+          <span class="foco" [class.disperso]="focoExibido() !== null && focoExibido()! < 60">Foco {{ focoExibido() ?? '—' }}</span>
         }
         <button class="btn btn-ghost btn-mini" (click)="encerrar()">Encerrar</button>
       </div>
     </div>
 
     @if (carregando()) {
-      <div class="cartao carregando">Gerando próxima questão…</div>
+      <div class="cartao carregando"><div class="spinner pequeno"></div>Gerando a próxima questão…</div>
     } @else if (questao()) {
-      <div class="cartao questao">
+      <div class="questao">
         <h4>{{ questao()!.pergunta }}</h4>
-        @for (op of questao()!.opcoes; track $index) {
-          <button class="opt"
-            [class.acerto]="respondida() && $index === questao()!.correta"
-            [class.erro]="respondida() && escolhida() === $index && !acertou()"
-            [disabled]="respondida()"
-            (click)="responder($index)">{{ letra($index) }}) {{ op }}</button>
-        }
+        <div class="opcoes">
+          @for (op of questao()!.opcoes; track $index) {
+            <button class="opt"
+              [class.acerto]="respondida() && $index === questao()!.correta"
+              [class.erro]="respondida() && escolhida() === $index && !acertou()"
+              [disabled]="respondida()"
+              (click)="responder($index)"><span class="letra">{{ letra($index) }}</span><span>{{ op }}</span></button>
+          }
+        </div>
         @if (respondida()) {
-          <p class="feedback" [class.ok]="acertou()" [class.nok]="!acertou()">
-            {{ acertou() ? 'Correto. ' : 'Não foi dessa vez. ' }}{{ justificativa() }}
-          </p>
-          <button class="btn btn-accent proxima" (click)="proxima()">Próxima questão →</button>
+          <div class="resultado" [class.ok]="acertou()" [class.nok]="!acertou()">
+            <p class="veredito">{{ acertou() ? 'Correto!' : 'Não foi dessa vez.' }}
+              @if (xpGanho()) { <span class="xp-ganho">+{{ xpGanho() }} XP</span> }
+            </p>
+            @if (metaBatida()) { <p class="meta-aviso">🎯 Meta diária batida! (+50 XP)</p> }
+            <p>{{ justificativa() }}</p>
+            @if (questao()!.pagina) {
+              <a class="fonte-link" [href]="api.pdfUrl(questao()!.material_id, questao()!.pagina)" target="_blank" rel="noopener">
+                <span class="fonte-doc">{{ questao()!.material_titulo }} · pág. {{ questao()!.pagina }}</span>
+                <span class="fonte-abrir">Abrir no PDF ↗</span>
+              </a>
+            } @else if (questao()!.material_titulo) {
+              <p class="fonte-link sem-link"><span class="fonte-doc">Fonte: {{ questao()!.material_titulo }}</span></p>
+            }
+          </div>
+          <button class="btn btn-accent proxima" (click)="proxima()">Próxima questão</button>
         }
       </div>
     } @else if (erro()) {
-      <div class="cartao"><p class="erro" style="margin:0">{{ erro() }}</p></div>
+      <p class="erro">{{ erro() }}</p>
     }
   }
 
   @if (fase() === 'fim') {
     <div class="fim">
-      <h3>{{ modoRevisao() ? 'Revisão concluída' : 'Questionário encerrado' }}</h3>
-      <p>{{ respondidas() }} respondidas · {{ acertos() }} certas{{ respondidas() > 0 ? ' (' + pct() + '%)' : '' }}</p>
-      <button class="btn btn-ghost btn-mini" (click)="voltar()">Voltar ao início</button>
+      <h3>{{ modoRevisao() ? 'Revisão concluída' : 'Sessão encerrada' }}</h3>
+      @if (respondidas() > 0) {
+        <div class="fim-pct">{{ pct() }}%</div>
+        <p>{{ acertos() }} de {{ respondidas() }} questões certas</p>
+      } @else {
+        <p>Nenhuma questão respondida.</p>
+      }
+      <button class="btn btn-accent" (click)="voltar()">Escolher outros PDFs</button>
     </div>
   }
 

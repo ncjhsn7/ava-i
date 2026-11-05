@@ -1,25 +1,119 @@
-<div class="view lobby">
-  <div class="hero">
-    <div class="selo">AVA-I</div>
-    <h1>Estude pelos seus PDFs</h1>
-    <p>Gere questionários e materiais de estudo a partir dos seus documentos, com acompanhamento de foco durante a sessão.</p>
+<div class="view">
+  <div class="cabecalho">
+    <h2>O que vamos estudar hoje?</h2>
+    <p>Escolha uma cadeira para praticar com questões geradas a partir dos seus PDFs.</p>
   </div>
 
-  <div class="opcoes">
-    <a class="opcao" routerLink="/estudar">
-      <span class="op-icone">▶</span>
-      <b>Estudar</b>
-      <span class="op-desc">Escolha a cadeira e os PDFs, e pratique com questionário ou material de estudo.</span>
-    </a>
-    <a class="opcao" routerLink="/materiais">
-      <span class="op-icone">+</span>
-      <b>Materiais</b>
-      <span class="op-desc">Crie cadeiras e envie os PDFs que servem de base para o estudo.</span>
-    </a>
-    <a class="opcao" routerLink="/painel">
-      <span class="op-icone">▦</span>
-      <b>Painel</b>
-      <span class="op-desc">Acompanhe tempo estudado, foco e acerto por material.</span>
-    </a>
-  </div>
+  @if (erroApi()) {
+    <p class="erro">Não foi possível falar com o servidor. Verifique se o backend está rodando na porta 8000.</p>
+  }
+
+  @if (carregado() && !erroApi() && cadeiras().length === 0) {
+    <section class="boas-vindas">
+      <h3>Comece montando sua primeira cadeira</h3>
+      <ol>
+        <li><b>Crie uma cadeira</b> e envie os PDFs da matéria.</li>
+        <li><b>Estude</b> respondendo a questões geradas a partir deles.</li>
+        <li><b>Acompanhe</b> seu acerto e seu foco no painel.</li>
+      </ol>
+      <a class="btn btn-accent" routerLink="/materiais">Criar cadeira</a>
+    </section>
+  }
+
+  @if (prog(); as p) {
+    <section class="gami">
+      <div class="g-card g-nivel">
+        <div class="g-topo">
+          <span class="g-selo">Nv {{ p.nivel }}</span>
+          <div>
+            <strong>{{ p.titulo }}</strong>
+            <small>{{ p.xp }} XP no total</small>
+          </div>
+        </div>
+        <div class="g-barra" role="progressbar" [attr.aria-valuenow]="pctNivel()" aria-valuemin="0" aria-valuemax="100">
+          <span [style.width.%]="pctNivel()"></span>
+        </div>
+        <small>Faltam {{ p.xp_proximo_nivel - p.xp }} XP para o nível {{ p.nivel + 1 }}</small>
+        @if (p.area_mais_estudada) {
+          <small class="g-area">Área mais estudada: <b>{{ p.area_mais_estudada }}</b></small>
+        }
+      </div>
+
+      <div class="g-card g-streak" [class.apagado]="!p.estudou_hoje">
+        <span class="g-grande">🔥 {{ p.streak_dias }}</span>
+        <strong>{{ p.streak_dias === 1 ? 'dia seguido' : 'dias seguidos' }}</strong>
+        <small>{{ p.estudou_hoje ? 'Você já estudou hoje.' : (p.streak_dias ? 'Estude hoje para não perder a sequência.' : 'Comece sua sequência hoje.') }}</small>
+      </div>
+
+      <div class="g-card g-meta" [class.batida]="p.respondidas_hoje >= p.meta_diaria">
+        <svg viewBox="0 0 64 64" class="g-anel" aria-hidden="true">
+          <circle cx="32" cy="32" r="26" class="trilho" />
+          <circle cx="32" cy="32" r="26" class="valor"
+            [attr.stroke-dasharray]="circMeta"
+            [attr.stroke-dashoffset]="circMeta * (1 - pctMeta() / 100)" />
+        </svg>
+        <div>
+          <strong>{{ p.respondidas_hoje }}/{{ p.meta_diaria }} questões hoje</strong>
+          <small>{{ p.respondidas_hoje >= p.meta_diaria ? 'Meta batida! +50 XP' : 'Meta diária' }}</small>
+          <label class="g-sel">Meta:
+            <select (change)="mudarMeta($event)">
+              @for (m of metas; track m) {
+                <option [value]="m" [selected]="m === p.meta_diaria">{{ m }}</option>
+              }
+            </select>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    @if (p.dominio.length) {
+      <section class="dominio">
+        @if (p.areas.length) {
+          <h3>XP por área</h3>
+          <div class="areas">
+            @for (a of p.areas; track a.area) {
+              <span class="area-chip"><b>{{ a.area }}</b> {{ a.xp }} XP · {{ a.respostas }} {{ a.respostas === 1 ? 'questão' : 'questões' }}</span>
+            }
+          </div>
+        }
+        <h3>Domínio por PDF</h3>
+        <ul>
+          @for (d of p.dominio; track d.material_id) {
+            <li>
+              <div class="d-info">
+                <span class="d-titulo">{{ d.titulo }}</span>
+                <span class="d-cadeira">{{ nomeCadeira(d.cadeira_id) }}@if (d.area) { · {{ d.area }} }</span>
+              </div>
+              <div class="d-barra"><span [style.width.%]="d.pct ?? 0" [attr.data-status]="d.status"></span></div>
+              <span class="d-pct">{{ d.pct === null ? '—' : d.pct + '%' }}</span>
+              <span class="d-status" [attr.data-status]="d.status">{{ d.status }}</span>
+            </li>
+          }
+        </ul>
+        <p class="d-nota">Calculado sobre as últimas 20 respostas de cada PDF. "Dominado" = 80% ou mais, com pelo menos 10 respostas.</p>
+      </section>
+    }
+  }
+
+  @if (cadeiras().length) {
+    <div class="cadeiras">
+      @for (c of cadeiras(); track c.id) {
+        <article class="bloco" [style.--cor]="cor(c.id)">
+          <a class="bloco-topo" routerLink="/estudar" [queryParams]="{ cadeira: c.id }">
+            <span class="letra" aria-hidden="true">{{ inicial(c.nome) }}</span>
+            <span class="qtd">{{ rotuloPdfs(c.id) }}</span>
+          </a>
+          <h3>{{ c.nome }}</h3>
+          <div class="acoes">
+            <a class="acao principal" routerLink="/estudar" [queryParams]="{ cadeira: c.id }">Estudar</a>
+            <a class="acao" routerLink="/painel" [queryParams]="{ cadeira: c.id }">Painel</a>
+          </div>
+        </article>
+      }
+      <a class="bloco novo" routerLink="/materiais">
+        <span class="mais" aria-hidden="true">+</span>
+        <span>Nova cadeira</span>
+      </a>
+    </div>
+  }
 </div>

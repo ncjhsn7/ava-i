@@ -2,11 +2,57 @@ import random
 from collections import defaultdict
 from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+import os
 from sqlalchemy.orm import Session
-from . import models, schemas, rag, llm, config
-from .database import Base, engine, get_db
+from . import models, schemas, rag, llm, config, gamificacao
+from sqlalchemy import inspect, text
+import threading
+from .database import Base, SessionLocal, engine, get_db
 
 Base.metadata.create_all(bind=engine)
+_colunas = {c["name"] for c in inspect(engine).get_columns("questoes")}
+with engine.begin() as conn:
+    if "evidencia" not in _colunas:
+        conn.execute(text("ALTER TABLE questoes ADD COLUMN evidencia TEXT DEFAULT ''"))
+    if "explicacoes" not in _colunas:
+        conn.execute(text("ALTER TABLE questoes ADD COLUMN explicacoes JSON DEFAULT '[]'"))
+    if "pagina" not in _colunas:
+        conn.execute(text("ALTER TABLE questoes ADD COLUMN pagina INTEGER"))
+    if "criado_em" not in {c["name"] for c in inspect(engine).get_columns("respostas")}:
+        conn.execute(text("ALTER TABLE respostas ADD COLUMN criado_em DATETIME"))
+    if "area" not in {c["name"] for c in inspect(engine).get_columns("materiais")}:
+        conn.execute(text("ALTER TABLE materiais ADD COLUMN area VARCHAR(80) DEFAULT ''"))
+
+
+def _areas_existentes(db: Session) -> list[str]:
+    return sorted({m.area for m in db.query(models.Material).all() if m.area})
+
+
+def _classificar_material(db: Session, material: models.Material, conteudo: str) -> bool:
+    """Preenche a área do material via LLM; se falhar, deixa vazia para tentar depois."""
+    if not llm.disponivel():
+        return False
+    try:
+        material.area = llm.classificar_area(material.titulo, conteudo, _areas_existentes(db))
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        return False
+
+
+def _gerar_com_retentativa(candidatos: list, tentativas: int = 3):
+    """Sorteia trechos até o LLM devolver uma questão (pula capa, referências etc.)."""
+    pool = list(candidatos)
+    random.shuffle(pool)
+    ultimo_erro = None
+    for item in pool[:tentativas]:
+        try:
+            return item, llm.pergunta_llm(item[1])
+        except llm.TrechoSemConteudo as e:
+            ultimo_erro = e
+    raise ultimo_erro or ValueError("sem trechos avaliáveis")
 
 app = FastAPI(title="AVA-I API", version="0.3.0")
 app.add_middleware(
@@ -50,6 +96,7 @@ def remover_cadeira(cadeira_id: int, db: Session = Depends(get_db)):
         db.delete(s)
     for material in list(cadeira.materiais):
         rag.remover_indice(material.id)
+        rag.remover_pdf(material.id)
     db.delete(cadeira)
     db.commit()
     return {"removido": True}
@@ -76,7 +123,35 @@ async def criar_material(
     db.commit()
     db.refresh(material)
     rag.indexar(material.id, chunks)
+    rag.salvar_pdf(material.id, conteudo)
+    # A área é classificada em segundo plano para o envio não ficar esperando o LLM.
+    if llm.disponivel():
+        threading.Thread(target=_classificar_pendentes, daemon=True).start()
     return material
+
+
+@app.put("/materiais/{material_id}/area", response_model=schemas.MaterialOut)
+def alterar_area(material_id: int, dados: schemas.AreaIn, db: Session = Depends(get_db)):
+    material = db.get(models.Material, material_id)
+    if not material:
+        raise HTTPException(404, "Material não encontrado")
+    area = " ".join(dados.area.split())[:60]
+    for e in _areas_existentes(db):
+        if e.lower() == area.lower():
+            area = e
+            break
+    material.area = area
+    db.commit()
+    db.refresh(material)
+    return material
+
+
+@app.get("/materiais/{material_id}/pdf")
+def baixar_pdf(material_id: int):
+    caminho = rag.caminho_pdf(material_id)
+    if not os.path.exists(caminho):
+        raise HTTPException(404, "PDF original não disponível; reenvie o material")
+    return FileResponse(caminho, media_type="application/pdf", headers={"Content-Disposition": "inline"})
 
 
 @app.get("/cadeiras/{cadeira_id}/materiais", response_model=list[schemas.MaterialOut])
@@ -92,6 +167,7 @@ def remover_material(material_id: int, db: Session = Depends(get_db)):
     db.delete(material)
     db.commit()
     rag.remover_indice(material_id)
+    rag.remover_pdf(material_id)
     return {"removido": True}
 
 
@@ -102,9 +178,8 @@ def preview_material(material_id: int, db: Session = Depends(get_db)):
     chunks = rag.bons_chunks(rag.obter_chunks(material_id))
     if not chunks:
         raise HTTPException(422, "Material sem conteúdo indexado; reenvie o PDF")
-    chunk = random.choice(chunks)
     try:
-        q = llm.pergunta_llm(chunk)
+        (_, chunk), q = _gerar_com_retentativa([(material_id, c) for c in chunks])
     except Exception as e:
         raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e}. Verifique a chave e o modelo no .env.")
     return schemas.PerguntaOut(
@@ -113,6 +188,7 @@ def preview_material(material_id: int, db: Session = Depends(get_db)):
         correta=int(q["correta"]),
         justificativa=q.get("justificativa", ""),
         fonte=chunk[:400],
+        evidencia=q.get("evidencia", ""),
     )
 
 
@@ -143,9 +219,8 @@ def proxima_questao(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depe
             candidatos.append((mid, chunk))
     if not candidatos:
         raise HTTPException(422, "Sem conteúdo para gerar questões")
-    material_id, chunk = random.choice(candidatos)
     try:
-        q = llm.pergunta_llm(chunk)
+        (material_id, chunk), q = _gerar_com_retentativa(candidatos)
     except Exception as e:
         raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e}")
     questao = models.Questao(
@@ -157,11 +232,15 @@ def proxima_questao(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depe
         correta=int(q["correta"]),
         justificativa=q.get("justificativa", ""),
         chunk_fonte=chunk,
+        evidencia=q.get("evidencia", ""),
+        explicacoes=q.get("explicacoes", []),
+        pagina=rag.localizar_pagina(material_id, q.get("evidencia", ""), chunk),
         status="sessao",
     )
     db.add(questao)
     db.commit()
     db.refresh(questao)
+    _ = questao.material  # carrega o título antes de a sessão fechar
     return questao
 
 
@@ -182,10 +261,19 @@ def lote_questoes(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depend
     escolhidos = random.sample(candidatos, n)
     try:
         questoes = llm.perguntas_lote([c for _, c in escolhidos])
-    except Exception as e:
-        raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e}")
+    except llm.LimiteLLM as e:
+        raise HTTPException(429, f"Falha no LLM ({config.LLM_PROVIDER}): {e}")
+    except Exception as e_lote:
+        # Plano B: se o lote vier vazio/inválido, gera uma questão avulsa.
+        try:
+            item, q = _gerar_com_retentativa(candidatos)
+        except Exception:
+            raise HTTPException(502, f"Falha no LLM ({config.LLM_PROVIDER}): {e_lote}")
+        escolhidos = [item]
+        questoes = [(0, q)]
     criadas = []
-    for (material_id, chunk), q in zip(escolhidos, questoes):
+    for idx, q in questoes:
+        material_id, chunk = escolhidos[idx]
         questao = models.Questao(
             material_id=material_id,
             ordem=0,
@@ -195,6 +283,9 @@ def lote_questoes(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depend
             correta=int(q["correta"]),
             justificativa=q.get("justificativa", ""),
             chunk_fonte=chunk,
+            evidencia=q.get("evidencia", ""),
+            explicacoes=q.get("explicacoes", []),
+            pagina=rag.localizar_pagina(material_id, q.get("evidencia", ""), chunk),
             status="sessao",
         )
         db.add(questao)
@@ -202,6 +293,7 @@ def lote_questoes(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depend
     db.commit()
     for c in criadas:
         db.refresh(c)
+        _ = c.material
     return criadas
 
 
@@ -241,9 +333,62 @@ def registrar_resposta(sessao_id: int, dados: schemas.RespostaIn, db: Session = 
     if not questao:
         raise HTTPException(404, "Questão não encontrada")
     acertou = dados.escolhida == questao.correta
+    sequencia_antes = gamificacao.sequencia_na_sessao(db, sessao_id)
+    xp_ganho, sequencia = gamificacao.xp_resposta(acertou, sequencia_antes)
     db.add(models.Resposta(sessao_id=sessao_id, questao_id=dados.questao_id, escolhida=dados.escolhida, acertou=acertou))
     db.commit()
-    return {"acertou": acertou, "correta": questao.correta, "justificativa": questao.justificativa}
+    meta = gamificacao.obter_meta(db)
+    hoje = gamificacao.respondidas_no_dia(db, gamificacao.hoje())
+    meta_batida = hoje == meta
+    if meta_batida:
+        xp_ganho += gamificacao.XP_META
+    explicacoes = questao.explicacoes or []
+    explicacao = explicacoes[dados.escolhida] if not acertou and 0 <= dados.escolhida < len(explicacoes) else ""
+    return {
+        "acertou": acertou,
+        "correta": questao.correta,
+        "justificativa": questao.justificativa,
+        "explicacao_escolhida": explicacao,
+        "xp_ganho": xp_ganho,
+        "sequencia": sequencia,
+        "respondidas_hoje": hoje,
+        "meta_batida": meta_batida,
+    }
+
+
+_classificando = threading.Lock()
+
+
+def _classificar_pendentes() -> None:
+    """Classifica, em segundo plano, PDFs enviados antes de existir a área."""
+    if not _classificando.acquire(blocking=False):
+        return  # já tem uma classificação rodando
+    db = SessionLocal()
+    try:
+        sem_area = db.query(models.Material).filter(
+            (models.Material.area == "") | (models.Material.area.is_(None))).limit(10).all()
+        for material in sem_area:
+            try:
+                conteudo = "\n".join(rag.obter_chunks(material.id)[:6])
+            except Exception:
+                continue
+            if conteudo and not _classificar_material(db, material, conteudo):
+                break  # provavelmente limite do Gemini: tenta de novo numa próxima vez
+    finally:
+        db.close()
+        _classificando.release()
+
+
+@app.get("/progresso")
+def progresso(db: Session = Depends(get_db)):
+    if llm.disponivel():
+        threading.Thread(target=_classificar_pendentes, daemon=True).start()
+    return gamificacao.calcular(db)
+
+
+@app.put("/progresso/meta")
+def alterar_meta(dados: schemas.MetaIn, db: Session = Depends(get_db)):
+    return {"meta_diaria": gamificacao.definir_meta(db, dados.meta)}
 
 
 @app.post("/sessoes/{sessao_id}/encerrar")
@@ -278,6 +423,7 @@ def listar_erros(cadeira_id: int, limit: int = 20, db: Session = Depends(get_db)
             continue
         questao = db.get(models.Questao, r.questao_id)
         if questao:
+            _ = questao.material
             questoes.append(questao)
         if len(questoes) >= limit:
             break

@@ -2,6 +2,7 @@ import json
 import random
 import re
 from . import config
+from .rag import remover_referencias
 
 PROMPT = """Você é um gerador de avaliações formativas para um Ambiente Virtual de Aprendizagem.
 A partir do trecho de material didático abaixo, gere exatamente 1 questão de múltipla escolha em português, com 4 alternativas, ancorada exclusivamente no trecho.
@@ -149,10 +150,14 @@ def _embaralhar(questao: dict) -> dict:
     correta = int(questao.get("correta", 0))
     if not 0 <= correta < len(opcoes):
         return questao
-    texto_correto = opcoes[correta]
-    random.shuffle(opcoes)
-    questao["opcoes"] = opcoes
-    questao["correta"] = opcoes.index(texto_correto)
+    explicacoes = questao.get("explicacoes")
+    if not isinstance(explicacoes, list) or len(explicacoes) != len(opcoes):
+        explicacoes = None
+    ordem = list(range(len(opcoes)))
+    random.shuffle(ordem)
+    questao["opcoes"] = [opcoes[i] for i in ordem]
+    questao["correta"] = ordem.index(correta)
+    questao["explicacoes"] = [str(explicacoes[i]) for i in ordem] if explicacoes else []
     return questao
 
 
@@ -207,11 +212,16 @@ def disponivel() -> bool:
     return False
 
 
-def _gemini(prompt: str, max_tokens: int, json_mode: bool = True) -> str:
+class LimiteLLM(RuntimeError):
+    """Cota do provedor esgotada: não adianta insistir agora."""
+
+
+def _gemini(prompt: str, max_tokens: int, json_mode: bool = True, schema: dict | None = None,
+            modelo: str | None = None, esperar_limite: bool = True) -> str:
     import urllib.request
     import urllib.error
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.GEMINI_MODEL}:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo or config.GEMINI_MODEL}:generateContent"
     gen = {
         "temperature": 0.8,
         "maxOutputTokens": max(max_tokens, 2048),
@@ -219,6 +229,8 @@ def _gemini(prompt: str, max_tokens: int, json_mode: bool = True) -> str:
     }
     if json_mode:
         gen["responseMimeType"] = "application/json"
+        if schema:
+            gen["responseSchema"] = schema
     corpo = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": gen,
@@ -231,14 +243,34 @@ def _gemini(prompt: str, max_tokens: int, json_mode: bool = True) -> str:
             "x-goog-api-key": config.GEMINI_API_KEY,
         },
     )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            dados = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        detalhe = e.read().decode("utf-8", "ignore")
-        if e.code == 429:
-            raise RuntimeError("limite de uso da camada gratuita do Gemini atingido (429). Aguarde um minuto e tente de novo.") from None
-        raise RuntimeError(f"HTTP {e.code}: {detalhe[:200]}") from None
+    import time
+
+    nome_modelo = modelo or config.GEMINI_MODEL
+    dados = None
+    for tentativa in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                dados = json.loads(resp.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as e:
+            detalhe = e.read().decode("utf-8", "ignore")
+            if e.code == 429:
+                _registrar_falha(f"429 do Gemini ({nome_modelo})", detalhe)
+                if "PerDay" in detalhe:
+                    # Cota DIÁRIA: esperar segundos não resolve, falha na hora.
+                    raise LimiteLLM(
+                        f"a cota diária gratuita do Gemini ({nome_modelo}) acabou; ela renova amanhã. "
+                        "Para continuar hoje, troque GEMINI_MODEL no .env (ex.: gemini-2.5-flash-lite) e reinicie o backend."
+                    ) from None
+            if e.code in (429, 503) and tentativa < 2 and esperar_limite:
+                # Limite por minuto (ou servidor ocupado): espera um pouco e tenta de novo.
+                m = re.search(r'"retryDelay":\s*"(\d+)', detalhe)
+                espera = int(m.group(1)) if m else 5 * (tentativa + 1)
+                time.sleep(min(max(espera, 2), 15))
+                continue
+            if e.code == 429:
+                raise LimiteLLM("limite por minuto da camada gratuita do Gemini atingido (429). Aguarde um minuto e tente de novo.") from None
+            raise RuntimeError(f"HTTP {e.code}: {detalhe[:200]}") from None
     candidato = (dados.get("candidates") or [{}])[0]
     partes = candidato.get("content", {}).get("parts", [])
     texto = "".join(p.get("text", "") for p in partes)
@@ -247,7 +279,8 @@ def _gemini(prompt: str, max_tokens: int, json_mode: bool = True) -> str:
     return texto
 
 
-def _completar(prompt: str, max_tokens: int = 900, json_mode: bool = True) -> str:
+def _completar(prompt: str, max_tokens: int = 900, json_mode: bool = True, schema: dict | None = None,
+               leve: bool = False) -> str:
     if config.LLM_PROVIDER == "anthropic" and config.ANTHROPIC_API_KEY:
         import anthropic
 
@@ -259,7 +292,9 @@ def _completar(prompt: str, max_tokens: int = 900, json_mode: bool = True) -> st
         )
         return msg.content[0].text
     if config.LLM_PROVIDER == "gemini" and config.GEMINI_API_KEY:
-        return _gemini(prompt, max_tokens, json_mode)
+        if leve:  # tarefa leve: modelo menor e sem ficar esperando o limite gratuito
+            return _gemini(prompt, max_tokens, json_mode, schema, modelo=config.GEMINI_MODEL_LEVE, esperar_limite=False)
+        return _gemini(prompt, max_tokens, json_mode, schema)
     raise RuntimeError("Nenhum LLM configurado")
 
 
@@ -287,28 +322,170 @@ def gerar_material_estudo(conteudo: str, nivel: str, objetivo: str, tempo: str) 
     return _completar(prompt, 4096, json_mode=False)
 
 
-PROMPT_PERGUNTA_CONTEUDO = """Você é um professor criando uma questão de estudo a partir de um material didático.
-Com base APENAS no trecho abaixo, crie 1 questão de múltipla escolha em português que avalie a compreensão do conteúdo.
+DIRETRIZES_QUESTAO = """Regras para a questão:
+- Avalie a COMPREENSÃO de um conceito, definição, relação, propriedade ou procedimento do conteúdo. Prefira questões de aplicar, interpretar, comparar ou calcular a questões de memorização literal.
+- Se o trecho traz um exemplo resolvido (valores numéricos, passo a passo), prefira uma questão que exija executar ou interpretar um passo desse procedimento (ex.: "dado x=-2, y=5, z=-4, quanto vale ∂f/∂x?").
+- NÃO pergunte "qual é o objetivo/propósito/finalidade" de um exemplo, slide ou seção, nem "o que é apresentado/descrito".
+- Pergunte SOMENTE sobre o que o trecho afirma ou demonstra explicitamente. Se um conceito aparece apenas como rótulo, título ou legenda de figura, sem explicação, NÃO crie uma definição para ele.
+- O enunciado deve ser autossuficiente: o aluno NÃO verá o trecho ao responder. Não use expressões como "segundo o trecho", "de acordo com o material", "conforme o texto", "nos slides", "no PDF" ou "apresentado no material".
+- PROIBIDO perguntar sobre: autor, professor, instituição, disciplina, datas, título do documento, número de slide/página/trecho ou bibliografia.
+- O texto vem de extração automática de PDF e pode ter ruído (numeração de slides, cabeçalhos/rodapés, repetições, fórmulas quebradas). Ignore o ruído. Escreva fórmulas de forma legível (ex.: ∂f/∂x = z).
+- 4 alternativas da mesma natureza, com tamanho e nível de detalhe parecidos: a correta NÃO pode ser a mais longa nem a mais detalhada. Exatamente 1 correta. Distratores refletem erros conceituais plausíveis de um estudante, nunca absurdos. Não use "todas/nenhuma das anteriores" nem "apenas/somente" para enfraquecer distratores.
+- "justificativa": explicação breve (1 a 2 frases, até ~250 caracteres), em linguagem de professor, do conceito por trás da resposta correta: explique o PORQUÊ (o mecanismo, a razão), sem repetir o texto da alternativa e sem começar com "Correta"/"A resposta certa é". Deve ser coerente com a alternativa correta e não pode citar "o trecho" nem "o material".
+- "explicacoes": lista com 4 frases curtas, na MESMA ordem de "opcoes", dizendo por que cada alternativa está certa ou errada (para as erradas, aponte o equívoco conceitual).
+- "evidencia": copie LITERALMENTE do trecho a menor passagem (no máximo 200 caracteres) que sustenta a resposta correta. Ela precisa de fato justificar a resposta; uma fórmula ou rótulo solto não serve.
+- Antes de responder, verifique: a resposta correta é sustentada pela evidência? Cada distrator é inequivocamente errado à luz do trecho? Se não, reformule; se não for possível, marque "pular": true.
+- Se o trecho não tiver conteúdo técnico avaliável (capa, sumário, referências, agradecimentos, apenas nomes/metadados ou apenas fórmulas sem explicação), não invente: marque "pular": true."""
 
-Requisitos:
-- Enunciado claro, contextualizado e respondível somente com o conteúdo do trecho.
-- Exatamente 4 alternativas plausíveis, sendo apenas 1 correta.
-- Evite alternativas obviamente erradas ou sem sentido.
+PROMPT_PERGUNTA_CONTEUDO = """Você é um professor criando uma questão de estudo a partir de um material didático.
+Com base APENAS no trecho abaixo, crie 1 questão de múltipla escolha em português.
+
+{diretrizes}
 
 TRECHO:
 {conteudo}
 
-Responda SOMENTE com um JSON válido no formato:
-{{"pergunta": "...", "opcoes": ["...", "...", "...", "..."], "correta": 0, "justificativa": "..."}}"""
+Responda SOMENTE com um JSON válido, em um destes formatos:
+{{"pergunta": "...", "opcoes": ["...", "...", "...", "..."], "correta": 0, "justificativa": "...", "explicacoes": ["...", "...", "...", "..."], "evidencia": "..."}}
+{{"pular": true}}"""
+
+
+class TrechoSemConteudo(ValueError):
+    pass
+
+
+# Campos obrigatórios e em ordem: sem isso o Gemini pode devolver itens quase vazios.
+# "pular" vem por último, como veredito da autochecagem depois de redigir a questão.
+_CAMPOS_QUESTAO = ["pergunta", "opcoes", "correta", "justificativa", "explicacoes", "evidencia", "pular"]
+_SCHEMA_QUESTAO_PROPS = {
+    "pergunta": {"type": "STRING"},
+    "opcoes": {"type": "ARRAY", "items": {"type": "STRING"}},
+    "correta": {"type": "INTEGER"},
+    "justificativa": {"type": "STRING"},
+    "explicacoes": {"type": "ARRAY", "items": {"type": "STRING"}},
+    "evidencia": {"type": "STRING"},
+    "pular": {"type": "BOOLEAN"},
+}
+SCHEMA_QUESTAO = {
+    "type": "OBJECT",
+    "properties": _SCHEMA_QUESTAO_PROPS,
+    "required": _CAMPOS_QUESTAO,
+    "propertyOrdering": _CAMPOS_QUESTAO,
+}
+SCHEMA_LOTE = {
+    "type": "OBJECT",
+    "properties": {
+        "questoes": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {"trecho": {"type": "INTEGER"}, **_SCHEMA_QUESTAO_PROPS},
+                "required": ["trecho", *_CAMPOS_QUESTAO],
+                "propertyOrdering": ["trecho", *_CAMPOS_QUESTAO],
+            },
+        }
+    },
+    "required": ["questoes"],
+}
+
+
+def _registrar_falha(motivo: str, conteudo: str) -> None:
+    """Guarda respostas problemáticas do LLM em logs/llm_falhas.log para diagnóstico."""
+    try:
+        import datetime
+        import os
+
+        os.makedirs("logs", exist_ok=True)
+        with open(os.path.join("logs", "llm_falhas.log"), "a", encoding="utf-8") as f:
+            f.write(f"\n===== {datetime.datetime.now().isoformat(timespec='seconds')} | {motivo}\n{conteudo[:8000]}\n")
+    except Exception:
+        pass
+
+
+_ultima_resposta = {"texto": ""}
+
+
+def _json_llm(prompt: str, max_tokens: int, schema: dict, tentativas: int = 2, leve: bool = False) -> dict:
+    """Chama o LLM e interpreta o JSON; se vier malformado, tenta de novo."""
+    erro = None
+    for _ in range(tentativas):
+        texto = _completar(prompt, max_tokens, schema=schema, leve=leve)
+        bruto = re.search(r"\{.*\}", texto, re.S)
+        if not bruto:
+            erro = ValueError("o modelo não retornou JSON")
+            continue
+        try:
+            dados = json.loads(bruto.group(0))
+            _ultima_resposta["texto"] = texto
+            return dados
+        except json.JSONDecodeError as e:
+            _registrar_falha(f"JSON inválido: {e.msg}", texto)
+            erro = ValueError(f"JSON inválido do modelo ({e.msg})")
+    raise erro
+
+
+def _normalizar(texto: str) -> str:
+    return re.sub(r"\s+", " ", texto or "").strip()
+
+
+def _evidencia_valida(evidencia: str, chunk: str) -> str:
+    """Mantém a evidência só se ela realmente existir no trecho (ou quase)."""
+    ev = _normalizar(evidencia)
+    ch = _normalizar(chunk)
+    if not ev or not ch:
+        return ""
+    if ev.lower() in ch.lower():
+        return ev
+    import difflib
+
+    m = difflib.SequenceMatcher(None, ch.lower(), ev.lower(), autojunk=False).find_longest_match(0, len(ch), 0, len(ev))
+    if m.size >= max(30, int(0.6 * len(ev))):
+        return ch[m.a:m.a + m.size].strip()
+    return ""
+
+
+# Perguntas sobre metadados do documento: descartadas.
+_ENUNCIADO_PROIBIDO = re.compile(
+    r"\b(?:autor(?:es|a)?|obras?|livros?|refer[êe]ncias? bibliogr|bibliografia|"
+    r"fontes? adaptad|slides? adaptad|professor(?:es|a)?|universidade|institui[çc][ãa]o|editora|"
+    r"objetivo principal|prop[óo]sito principal)\b",
+    re.I,
+)
+# Muletas que remetem ao documento: removidas do enunciado (a questão continua valendo).
+_MULETAS = re.compile(
+    r",?\s*(?:de acordo com|segundo|conforme(?: indicado| descrito| apresentado)?(?: n)?)\s*"
+    r"(?:o |a |os |as )?(?:material|texto|trecho|slides?|pdf|conte[úu]do|descrito)\b"
+    r"|,?\s*(?:apresentad[ao]s?|descrit[ao]s?|indicad[ao]s?|mencionad[ao]s?)\s+n[oa]s?\s+(?:material|texto|trecho|slides?|pdf)\b"
+    r"|,?\s*conforme descrito\b",
+    re.I,
+)
+
+
+def _limpar_enunciado(pergunta: str) -> str:
+    p = _MULETAS.sub("", pergunta)
+    p = re.sub(r"\s+([?.,])", r"\1", p)
+    p = re.sub(r"^[\s,;:]+", "", p)
+    p = re.sub(r"\s{2,}", " ", p).strip()
+    return p[:1].upper() + p[1:] if p else p
+
+
+def _questao_valida(q: dict, chunk: str) -> dict:
+    if q.get("pular"):
+        raise TrechoSemConteudo("trecho sem conteúdo avaliável")
+    q["pergunta"] = _limpar_enunciado(q.get("pergunta", ""))
+    if _ENUNCIADO_PROIBIDO.search(q["pergunta"]):
+        _registrar_falha("enunciado sobre metadados descartado", q.get("pergunta", ""))
+        raise TrechoSemConteudo("enunciado sobre metadados")
+    if not q.get("pergunta") or not q.get("opcoes") or len(q["opcoes"]) < 2:
+        raise ValueError("resposta do modelo inválida")
+    q["evidencia"] = _evidencia_valida(q.get("evidencia", ""), chunk)
+    return _embaralhar(q)
 
 
 def pergunta_llm(conteudo: str) -> dict:
-    texto = _completar(PROMPT_PERGUNTA_CONTEUDO.format(conteudo=conteudo[:6000]), 900)
-    bruto = re.search(r"\{.*\}", texto, re.S)
-    dados = json.loads(bruto.group(0)) if bruto else {}
-    if not dados.get("opcoes") or len(dados["opcoes"]) < 2:
-        raise ValueError("resposta do modelo inválida")
-    return _embaralhar(dados)
+    prompt = PROMPT_PERGUNTA_CONTEUDO.format(diretrizes=DIRETRIZES_QUESTAO, conteudo=remover_referencias(conteudo)[:6000])
+    dados = _json_llm(prompt, 2000, SCHEMA_QUESTAO)
+    return _questao_valida(dados, conteudo)
 
 
 def gerar_pergunta_conteudo(conteudo: str) -> dict:
@@ -316,29 +493,74 @@ def gerar_pergunta_conteudo(conteudo: str) -> dict:
 
 
 PROMPT_LOTE = """Você é um professor criando questões de estudo a partir de um material didático.
-Para CADA trecho numerado abaixo, crie 1 questão de múltipla escolha em português (4 alternativas plausíveis, exatamente 1 correta), respondível apenas com o conteúdo daquele trecho.
+Para CADA trecho numerado abaixo, crie 1 questão de múltipla escolha em português, respondível apenas com o conteúdo daquele trecho. Cada questão deve tratar de um conceito diferente; não repita a mesma ideia entre questões.
+
+{diretrizes}
 
 TRECHOS:
 {trechos}
 
-Responda SOMENTE com um JSON válido no formato, com exatamente {n} itens na ordem dos trechos:
-{{"questoes": [{{"pergunta": "...", "opcoes": ["...", "...", "...", "..."], "correta": 0, "justificativa": "..."}}]}}"""
+Responda SOMENTE com um JSON válido, com um item por trecho, indicando o número do trecho em "trecho":
+{{"questoes": [{{"trecho": 1, "pergunta": "...", "opcoes": ["...", "...", "...", "..."], "correta": 0, "justificativa": "...", "explicacoes": ["...", "...", "...", "..."], "evidencia": "..."}}, {{"trecho": 2, "pular": true}}]}}"""
 
 
-def perguntas_lote(conteudos: list[str]) -> list[dict]:
+def perguntas_lote(conteudos: list[str]) -> list[tuple[int, dict]]:
+    """Retorna pares (índice do trecho, questão); trechos pulados ou inválidos ficam de fora."""
     if not conteudos:
         return []
-    trechos = "\n\n".join(f"[{i + 1}] {c[:1500]}" for i, c in enumerate(conteudos))
-    texto = _completar(PROMPT_LOTE.format(trechos=trechos, n=len(conteudos)), 4096)
-    bruto = re.search(r"\{.*\}", texto, re.S)
-    dados = json.loads(bruto.group(0)) if bruto else {}
+    trechos = "\n\n".join(f"[{i + 1}] {remover_referencias(c)[:1500]}" for i, c in enumerate(conteudos))
+    prompt = PROMPT_LOTE.format(diretrizes=DIRETRIZES_QUESTAO, trechos=trechos)
+    dados = _json_llm(prompt, 8000, SCHEMA_LOTE)
     saida = []
-    for q in dados.get("questoes", []):
-        if q.get("opcoes") and len(q["opcoes"]) >= 2:
-            saida.append(_embaralhar(q))
+    usados = set()
+    for pos, q in enumerate(dados.get("questoes", [])):
+        try:
+            idx = int(q.get("trecho", pos + 1)) - 1
+        except (TypeError, ValueError):
+            idx = pos
+        if not 0 <= idx < len(conteudos) or idx in usados:
+            continue
+        try:
+            saida.append((idx, _questao_valida(q, conteudos[idx])))
+            usados.add(idx)
+        except ValueError:
+            continue
     if not saida:
+        _registrar_falha("lote sem questões válidas", _ultima_resposta["texto"])
         raise ValueError("o modelo não retornou questões válidas")
     return saida
+
+
+PROMPT_AREA = """Classifique o material didático abaixo em UMA área do conhecimento ampla, do jeito que um estudante organizaria seus estudos (ex.: Inteligência Artificial, Cálculo, Redes de Computadores, Banco de Dados, Estatística, Culinária, História).
+- Use de 1 a 4 palavras, em português, com iniciais maiúsculas.
+- Prefira a área ampla à específica (ex.: "Inteligência Artificial" em vez de "Backpropagation").
+- Se uma das áreas já existentes servir, repita EXATAMENTE o nome dela.
+
+ÁREAS JÁ EXISTENTES: {existentes}
+
+TÍTULO DO MATERIAL: {titulo}
+
+INÍCIO DO CONTEÚDO:
+{conteudo}
+
+Responda SOMENTE com um JSON válido: {{"area": "..."}}"""
+
+SCHEMA_AREA = {"type": "OBJECT", "properties": {"area": {"type": "STRING"}}, "required": ["area"]}
+
+
+def classificar_area(titulo: str, conteudo: str, existentes: list[str]) -> str:
+    prompt = PROMPT_AREA.format(
+        existentes=", ".join(existentes) if existentes else "(nenhuma)",
+        titulo=titulo or "(sem título)",
+        conteudo=remover_referencias(conteudo)[:3000],
+    )
+    area = re.sub(r"\s+", " ", str(_json_llm(prompt, 200, SCHEMA_AREA, tentativas=1, leve=True).get("area", ""))).strip(" .\"'")[:60]
+    if not area:
+        raise ValueError("o modelo não retornou uma área")
+    for e in existentes:  # reaproveita a grafia de uma área já existente
+        if e.lower() == area.lower():
+            return e
+    return area
 
 
 def extrair_topicos(texto: str) -> list[tuple[str, str]]:

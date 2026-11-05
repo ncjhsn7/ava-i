@@ -12,6 +12,7 @@ export interface Material {
   cadeira_id: number;
   titulo: string;
   status: string;
+  area?: string;
 }
 
 export interface Questao {
@@ -23,7 +24,36 @@ export interface Questao {
   correta: number;
   justificativa: string;
   chunk_fonte: string;
+  evidencia?: string;
+  material_id: number;
+  material_titulo?: string;
+  pagina?: number | null;
   status: string;
+}
+
+export interface DominioPdf {
+  material_id: number;
+  titulo: string;
+  cadeira_id: number;
+  area: string;
+  pct: number | null;
+  respostas: number;
+  status: 'Novo' | 'Começando' | 'Em progresso' | 'Dominado';
+}
+
+export interface Progresso {
+  xp: number;
+  nivel: number;
+  titulo: string;
+  xp_nivel_inicio: number;
+  xp_proximo_nivel: number;
+  streak_dias: number;
+  estudou_hoje: boolean;
+  respondidas_hoje: number;
+  meta_diaria: number;
+  dominio: DominioPdf[];
+  areas: { area: string; xp: number; respostas: number; acerto: number | null }[];
+  area_mais_estudada: string | null;
 }
 
 export interface Pergunta {
@@ -59,6 +89,22 @@ export interface Painel {
 export class ApiService {
   private http = inject(HttpClient);
   private base = environment.apiUrl;
+
+  definirArea(materialId: number, area: string) {
+    return this.http.put<Material>(`${this.base}/materiais/${materialId}/area`, { area });
+  }
+
+  progresso() {
+    return this.http.get<Progresso>(`${this.base}/progresso`);
+  }
+
+  definirMeta(meta: number) {
+    return this.http.put<{ meta_diaria: number }>(`${this.base}/progresso/meta`, { meta });
+  }
+
+  pdfUrl(materialId: number, pagina?: number | null) {
+    return `${this.base}/materiais/${materialId}/pdf` + (pagina ? `#page=${pagina}` : '');
+  }
 
   listarCadeiras() {
     return this.http.get<Cadeira[]>(`${this.base}/cadeiras`);
@@ -118,7 +164,7 @@ export class ApiService {
   }
 
   responder(sessaoId: number, questaoId: number, escolhida: number) {
-    return this.http.post<{ acertou: boolean; correta: number; justificativa: string }>(
+    return this.http.post<{ acertou: boolean; correta: number; justificativa: string; explicacao_escolhida?: string; xp_ganho?: number; sequencia?: number; respondidas_hoje?: number; meta_batida?: boolean }>(
       `${this.base}/sessoes/${sessaoId}/respostas`, { questao_id: questaoId, escolhida });
   }
 

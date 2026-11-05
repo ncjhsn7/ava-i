@@ -1,10 +1,13 @@
 import { Component, OnDestroy, OnInit, inject, signal, computed, ElementRef, ViewChild } from '@angular/core';
+import { RouterLink, ActivatedRoute } from '@angular/router';
+import { corCadeira, inicial } from '../cores';
 import { ApiService, Cadeira, Material, Questao, TelemetriaItem } from '../services/api.service';
 import { VisionService } from '../services/vision.service';
 import { YoloService } from '../services/yolo.service';
 
 @Component({
   selector: 'app-estudante',
+  imports: [RouterLink],
   templateUrl: './estudante.component.html',
   styleUrl: './estudante.component.css'
 })
@@ -12,6 +15,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
   api = inject(ApiService);
   vision = inject(VisionService);
   yolo = inject(YoloService);
+  private route = inject(ActivatedRoute);
 
   @ViewChild('cam') cam?: ElementRef<HTMLVideoElement>;
 
@@ -28,6 +32,12 @@ export class EstudanteComponent implements OnInit, OnDestroy {
   respondida = signal(false);
   acertou = signal(false);
   justificativa = signal('');
+  explicacaoEscolhida = signal('');
+  sequencia = signal(0);
+  xpGanho = signal(0);
+  metaBatida = signal(false);
+  respondidasHoje = signal(0);
+  metaDiaria = signal(10);
   respondidas = signal(0);
   acertos = signal(0);
   monitorando = signal(false);
@@ -44,8 +54,8 @@ export class EstudanteComponent implements OnInit, OnDestroy {
   focoExibido = computed<number | null>(() => (this.vision.ativo() ? this.vision.foco() : null));
   corFoco = computed(() => {
     const v = this.focoExibido();
-    if (v === null) return '#3a4150';
-    return v >= 60 ? '#5b7cfa' : v >= 40 ? '#e0b15a' : '#e26d6d';
+    if (v === null) return '#2e2e35';
+    return v >= 60 ? '#69db7c' : v >= 40 ? '#ffa94d' : '#ff6b6b';
   });
   circ = 2 * Math.PI * 63;
 
@@ -57,7 +67,13 @@ export class EstudanteComponent implements OnInit, OnDestroy {
   private eventosEnviados = 0;
 
   ngOnInit() {
+    this.api.progresso().subscribe({
+      next: p => { this.respondidasHoje.set(p.respondidas_hoje); this.metaDiaria.set(p.meta_diaria); },
+      error: () => {}
+    });
     this.api.listarCadeiras().subscribe(cs => this.cadeiras.set(cs));
+    const id = Number(this.route.snapshot.queryParamMap.get('cadeira'));
+    if (id) this.abrirCadeira(id);
   }
 
   ngOnDestroy() {
@@ -70,14 +86,8 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     return String.fromCharCode(97 + i);
   }
 
-  inicial(nome: string) {
-    return (nome.trim().charAt(0) || '?').toUpperCase();
-  }
-
-  corCadeira(id: number) {
-    const h = (id * 47) % 360;
-    return `hsl(${h},38%,38%)`;
-  }
+  inicial = inicial;
+  corCadeira = corCadeira;
 
   abrirCadeira(id: number) {
     this.cadeiraId.set(id);
@@ -151,6 +161,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.carregando.set(true);
     this.erro.set('');
     this.respondidas.set(0);
+    this.sequencia.set(0);
     this.acertos.set(0);
     this.fila = [];
     this.modoRevisao.set(false);
@@ -184,6 +195,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
             this.modoRevisao.set(true);
             this.fila = qs;
             this.respondidas.set(0);
+            this.sequencia.set(0);
             this.acertos.set(0);
             this.fase.set('quiz');
             this.timer = setInterval(() => this.tick(), 1000);
@@ -229,6 +241,9 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.respondida.set(false);
     this.acertou.set(false);
     this.justificativa.set('');
+    this.explicacaoEscolhida.set('');
+    this.xpGanho.set(0);
+    this.metaBatida.set(false);
   }
 
   private prefetch() {
@@ -246,6 +261,11 @@ export class EstudanteComponent implements OnInit, OnDestroy {
       this.respondida.set(true);
       this.acertou.set(r.acertou);
       this.justificativa.set(r.justificativa);
+      this.explicacaoEscolhida.set(r.explicacao_escolhida || '');
+      this.sequencia.set(r.sequencia ?? 0);
+      this.xpGanho.set(r.xp_ganho ?? 0);
+      this.metaBatida.set(!!r.meta_batida);
+      if (r.respondidas_hoje !== undefined) this.respondidasHoje.set(r.respondidas_hoje);
       this.respondidas.update(n => n + 1);
       if (r.acertou) this.acertos.update(n => n + 1);
     });

@@ -1,13 +1,17 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { RouterLink, ActivatedRoute } from '@angular/router';
+import { corCadeira, inicial } from '../cores';
 import { ApiService, Cadeira, Painel } from '../services/api.service';
 
 @Component({
   selector: 'app-painel',
+  imports: [RouterLink],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css'
 })
 export class PainelComponent implements OnInit {
   api = inject(ApiService);
+  private route = inject(ActivatedRoute);
 
   cadeiras = signal<Cadeira[]>([]);
   cadeiraId = signal(0);
@@ -15,16 +19,12 @@ export class PainelComponent implements OnInit {
 
   ngOnInit() {
     this.api.listarCadeiras().subscribe(cs => this.cadeiras.set(cs));
+    const id = Number(this.route.snapshot.queryParamMap.get('cadeira'));
+    if (id) this.selecionar(id);
   }
 
-  inicial(nome: string) {
-    return (nome.trim().charAt(0) || '?').toUpperCase();
-  }
-
-  corCadeira(id: number) {
-    const h = (id * 47) % 360;
-    return `hsl(${h},38%,38%)`;
-  }
+  inicial = inicial;
+  corCadeira = corCadeira;
 
   nomeCadeira() {
     return this.cadeiras().find(c => c.id === this.cadeiraId())?.nome ?? '';

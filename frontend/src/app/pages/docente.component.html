@@ -1,78 +1,110 @@
-<div class="view">
+<div class="view larga">
   <div class="cabecalho">
-    <div class="selo">Materiais</div>
-    <h2>Cadeiras e materiais</h2>
-    <p>Crie uma cadeira, envie os PDFs e gere uma questão de exemplo para conferir se o material está gerando perguntas adequadas.</p>
+    <h2>Materiais</h2>
+    <p>Organize seus PDFs por cadeira. Use a pré-visualização para conferir se um PDF rende boas questões.</p>
   </div>
 
-  <div class="cartao">
-    <label>Nova cadeira</label>
-    <div class="linha-form">
-      <input type="text" [value]="novoNome()" (input)="novoNome.set($any($event.target).value)" placeholder="Ex.: Redes de Computadores">
-      <button class="btn btn-accent" (click)="criarCadeira()" [disabled]="!novoNome().trim()">Criar</button>
-    </div>
-  </div>
+  <div class="mestre-detalhe">
+    <aside class="lista">
+      <form class="nova" (submit)="$event.preventDefault(); novoNome().trim() && criarCadeira()">
+        <label for="nova-cadeira" class="sr">Nova cadeira</label>
+        <input id="nova-cadeira" type="text" [value]="novoNome()" (input)="novoNome.set($any($event.target).value)" placeholder="Nova cadeira…">
+        <button class="btn btn-accent btn-mini" type="submit" [disabled]="!novoNome().trim()" aria-label="Criar cadeira">Criar</button>
+      </form>
 
-  @if (cadeiras().length === 0) {
-    <p class="vazio" style="margin-top:18px">Nenhuma cadeira ainda. Crie a primeira acima.</p>
-  }
-
-  @for (c of cadeiras(); track c.id) {
-    <div class="cartao cadeira">
-      <div class="cabeca" (click)="abrir(c)">
-        <b>{{ c.nome }}</b>
-        <span class="acoes-cab">
-          <button class="btn-x" title="Remover cadeira" (click)="removerCadeira(c, $event)">✕</button>
-          <span class="seta">{{ sel()?.id === c.id ? '▴' : '▾' }}</span>
-        </span>
-      </div>
-
-      @if (sel()?.id === c.id) {
-        <div class="corpo">
-          <div class="bloco-upload">
-            <input type="text" [value]="tituloMaterial()" (input)="tituloMaterial.set($any($event.target).value)" placeholder="Título do PDF (ex.: Capítulo 3 — SNMP)">
-            <label class="arquivo">
-              <input type="file" accept="application/pdf" (change)="selecionarArquivo($event)" hidden>
-              <span class="arquivo-botao">Escolher PDF</span>
-              <span class="arquivo-nome">{{ nomeArquivo() || 'Nenhum arquivo' }}</span>
-            </label>
-            <button class="btn btn-accent btn-mini" (click)="enviar(c)" [disabled]="enviando() || !arquivo || !tituloMaterial().trim()">
-              {{ enviando() ? 'Processando…' : 'Enviar PDF' }}
-            </button>
-          </div>
-          @if (erro()) { <p class="erro">{{ erro() }}</p> }
-
-          @if (materiais().length) {
-            <div class="rotulo-secao">PDFs ({{ materiais().length }})</div>
-            @for (m of materiais(); track m.id) {
-              <div class="material-item">
-                <div class="mat-cabeca">
-                  <span class="pdf-nome">{{ m.titulo }}</span>
-                  <span class="mat-acoes">
-                    <button class="btn btn-ghost btn-mini" (click)="verPreview(m)" [disabled]="carregando() === m.id">
-                      {{ carregando() === m.id ? 'Gerando…' : 'Pré-visualizar questão' }}
-                    </button>
-                    <button class="btn-x" title="Remover PDF" (click)="removerMaterial(m)">✕</button>
-                  </span>
-                </div>
-                @if (preview() && previewId() === m.id) {
-                  <div class="preview">
-                    <p class="pv-pergunta">{{ preview()!.pergunta }}</p>
-                    <ol type="a">
-                      @for (op of preview()!.opcoes; track $index) {
-                        <li [class.certa]="$index === preview()!.correta">{{ op }}</li>
-                      }
-                    </ol>
-                    <div class="pv-fonte">Trecho-fonte: {{ preview()!.fonte }}</div>
-                  </div>
-                }
-              </div>
-            }
-          } @else {
-            <p class="vazio">Nenhum PDF enviado ainda.</p>
-          }
-        </div>
+      @if (cadeiras().length === 0) {
+        <p class="vazio pequeno">Nenhuma cadeira ainda. Dê um nome acima para criar a primeira.</p>
       }
-    </div>
-  }
+      @for (c of cadeiras(); track c.id) {
+        <button class="item" [class.ativo]="sel()?.id === c.id" [style.--cor]="corCadeira(c.id)" (click)="abrir(c)">
+          <span class="chip" aria-hidden="true">{{ inicial(c.nome) }}</span>
+          <span class="item-nome">{{ c.nome }}</span>
+        </button>
+      }
+    </aside>
+
+    <section class="detalhe">
+      @if (sel(); as c) {
+        <header class="det-cab" [style.--cor]="corCadeira(c.id)">
+          <span class="chip grande" aria-hidden="true">{{ inicial(c.nome) }}</span>
+          <h3>{{ c.nome }}</h3>
+          <button class="btn-remover" (click)="removerCadeira(c, $event)">Excluir cadeira</button>
+        </header>
+
+        <div class="envio">
+          <h4>Enviar PDF</h4>
+          @if (arquivos().length <= 1) {
+            <input type="text" [value]="tituloMaterial()" (input)="tituloMaterial.set($any($event.target).value)"
+              [placeholder]="arquivos().length ? tituloDoArquivo(arquivos()[0]) : 'Título (opcional; padrão: nome do arquivo)'">
+          }
+          <label class="arquivo" [class.tem]="arquivos().length" [class.arrastando]="arrastando()"
+            (dragover)="aoArrastar($event)" (dragleave)="aoSairArrasto($event)" (drop)="aoSoltar($event)">
+            <input type="file" accept="application/pdf,.pdf" multiple (change)="selecionarArquivo($event)" hidden>
+            <span class="arquivo-ico" aria-hidden="true">PDF</span>
+            <span class="arquivo-nome">
+              @if (arrastando()) { Solte os PDFs aqui }
+              @else if (arquivos().length) { {{ arquivos().length === 1 ? '1 PDF selecionado' : arquivos().length + ' PDFs selecionados' }} · clique ou arraste para adicionar mais }
+              @else { Arraste PDFs aqui ou clique para escolher (pode selecionar vários) }
+            </span>
+          </label>
+          @if (arquivos().length) {
+            <ul class="fila-arquivos">
+              @for (f of arquivos(); track f.name + f.size; let i = $index) {
+                <li>
+                  <span class="fa-nome" [title]="f.name">{{ arquivos().length > 1 ? tituloDoArquivo(f) : f.name }}</span>
+                  <span class="fa-tam">{{ (f.size / 1048576).toFixed(1) }} MB</span>
+                  <button type="button" class="btn-x" aria-label="Tirar da lista" [disabled]="enviando()" (click)="removerArquivo(i)">✕</button>
+                </li>
+              }
+            </ul>
+            @if (arquivos().length > 1) {
+              <p class="dica-titulo">Com vários arquivos, cada PDF usa o nome do arquivo como título.</p>
+            }
+          }
+          <button class="btn btn-accent" (click)="enviar(c)" [disabled]="enviando() || !arquivos().length">
+            {{ enviando() ? progressoEnvio() : (arquivos().length > 1 ? 'Enviar ' + arquivos().length + ' PDFs' : 'Enviar PDF') }}
+          </button>
+          @if (erro()) { <p class="erro">{{ erro() }}</p> }
+        </div>
+
+        <h4 class="titulo-lista">PDFs desta cadeira <span>{{ materiais().length }}</span></h4>
+        @if (materiais().length) {
+          @for (m of materiais(); track m.id) {
+            <div class="material-item">
+              <div class="mat-cabeca">
+                <span class="pdf-info">
+                  <span class="pdf-nome">{{ m.titulo }}</span>
+                  <label class="area-campo" title="Área do conhecimento (classificada automaticamente; edite se quiser)">
+                    Área:
+                    <input type="text" [value]="m.area || ''" placeholder="classificando…" (change)="salvarArea(m, $event)">
+                  </label>
+                </span>
+                <span class="mat-acoes">
+                  <button class="btn btn-ghost btn-mini" (click)="verPreview(m)" [disabled]="carregando() === m.id">
+                    {{ carregando() === m.id ? 'Gerando…' : 'Pré-visualizar questão' }}
+                  </button>
+                  <button class="btn-x" title="Remover PDF" aria-label="Remover PDF" (click)="removerMaterial(m)">✕</button>
+                </span>
+              </div>
+              @if (preview() && previewId() === m.id) {
+                <div class="preview">
+                  <p class="pv-pergunta">{{ preview()!.pergunta }}</p>
+                  <ol>
+                    @for (op of preview()!.opcoes; track $index) {
+                      <li [class.certa]="$index === preview()!.correta"><span>{{ 'abcdefgh'[$index] }}</span>{{ op }}</li>
+                    }
+                  </ol>
+                  <div class="pv-fonte"><b>Trecho do PDF</b>{{ preview()!.fonte }}</div>
+                </div>
+              }
+            </div>
+          }
+        } @else {
+          <p class="vazio">Nenhum PDF ainda. Envie o primeiro acima.</p>
+        }
+      } @else {
+        <div class="sem-sel">Crie uma cadeira para começar a enviar PDFs.</div>
+      }
+    </section>
+  </div>
 </div>

@@ -18,6 +18,7 @@ class MaterialOut(BaseModel):
     cadeira_id: int
     titulo: str
     status: str
+    area: str | None = ""
 
     class Config:
         from_attributes = True
@@ -32,6 +33,10 @@ class QuestaoOut(BaseModel):
     correta: int
     justificativa: str
     chunk_fonte: str
+    evidencia: str | None = ""
+    material_id: int
+    material_titulo: str = ""
+    pagina: int | None = None
     status: str
 
     class Config:
@@ -44,6 +49,7 @@ class PerguntaOut(BaseModel):
     correta: int
     justificativa: str
     fonte: str
+    evidencia: str = ""
 
 
 class SessaoIn(BaseModel):
@@ -62,6 +68,14 @@ class EstudoIn(BaseModel):
     nivel: str = "Intermediário"
     objetivo: str = "Revisão para prova"
     tempo: str = "15 min"
+
+
+class AreaIn(BaseModel):
+    area: str
+
+
+class MetaIn(BaseModel):
+    meta: int
 
 
 class RespostaIn(BaseModel):

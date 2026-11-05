@@ -1,0 +1,43 @@
+# ---------- Segredos ----------
+.env
+**/.env
+!**/.env.example
+
+# ---------- Backend (Python) ----------
+backend/venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Dados locais gerados pelo app
+backend/ava.db
+backend/*.db-journal
+backend/chroma_data/
+backend/uploads/
+backend/logs/
+
+# ---------- Frontend (Angular) ----------
+# (o frontend/.gitignore do Angular já cobre o resto)
+frontend/node_modules/
+frontend/.angular/
+frontend/dist/
+
+# ---------- LaTeX (pasta tcc/) ----------
+tcc/**/*.aux
+tcc/**/*.bbl
+tcc/**/*.blg
+tcc/**/*.fdb_latexmk
+tcc/**/*.fls
+tcc/**/*.log
+tcc/**/*.out
+tcc/**/*.toc
+tcc/**/*.lof
+tcc/**/*.lot
+tcc/**/*.synctex.gz
+
+# ---------- Sistema / editores ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
