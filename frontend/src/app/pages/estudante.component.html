@@ -143,18 +143,22 @@
       </div>
     </div>
 
+    @if (monitorando() && yolo.alertaCelular()) {
+      <div class="aviso-celular">📱 Celular detectado. Guarde o celular e volte para a questão.</div>
+    }
+
     @if (carregando()) {
       <div class="cartao carregando"><div class="spinner pequeno"></div>Gerando a próxima questão…</div>
     } @else if (questao()) {
       <div class="questao">
-        <h4>{{ questao()!.pergunta }}</h4>
+        <h4 [innerHTML]="questao()!.pergunta | codigo"></h4>
         <div class="opcoes">
           @for (op of questao()!.opcoes; track $index) {
             <button class="opt"
               [class.acerto]="respondida() && $index === questao()!.correta"
               [class.erro]="respondida() && escolhida() === $index && !acertou()"
               [disabled]="respondida()"
-              (click)="responder($index)"><span class="letra">{{ letra($index) }}</span><span>{{ op }}</span></button>
+              (click)="responder($index)"><span class="letra">{{ letra($index) }}</span><span [innerHTML]="op | codigo"></span></button>
           }
         </div>
         @if (respondida()) {
@@ -163,7 +167,7 @@
               @if (xpGanho()) { <span class="xp-ganho">+{{ xpGanho() }} XP</span> }
             </p>
             @if (metaBatida()) { <p class="meta-aviso">🎯 Meta diária batida! (+50 XP)</p> }
-            <p>{{ justificativa() }}</p>
+            <p [innerHTML]="justificativa() | codigo"></p>
             @if (questao()!.pagina) {
               <a class="fonte-link" [href]="api.pdfUrl(questao()!.material_id, questao()!.pagina)" target="_blank" rel="noopener">
                 <span class="fonte-doc">{{ questao()!.material_titulo }} · pág. {{ questao()!.pagina }}</span>
@@ -186,7 +190,12 @@
       <h3>{{ modoRevisao() ? 'Revisão concluída' : 'Sessão encerrada' }}</h3>
       @if (respondidas() > 0) {
         <div class="fim-pct">{{ pct() }}%</div>
-        <p>{{ acertos() }} de {{ respondidas() }} questões certas</p>
+        <p>{{ acertos() }} de {{ respondidas() }} {{ respondidas() === 1 ? 'questão certa' : 'questões certas' }}</p>
+        <div class="fim-gami">
+          <span><b>+{{ xpSessao() }}</b> XP</span>
+          @if (melhorSequencia() >= 2) { <span>🔥 <b>{{ melhorSequencia() }}</b> seguidas</span> }
+          <span><b>{{ respondidasHoje() }}</b>/{{ metaDiaria() }} hoje</span>
+        </div>
       } @else {
         <p>Nenhuma questão respondida.</p>
       }
@@ -212,7 +221,9 @@
     </div>
     @if (monitorando()) {
       <div class="webcam-status">
-        @if (!vision.calibrado()) {
+        @if (yolo.alertaCelular()) {
+          <span class="st-aviso">celular à vista</span>
+        } @else if (!vision.calibrado()) {
           <span class="st-cal">calibrando… olhe para a tela</span>
         } @else if (!vision.temRosto()) {
           <span class="st-aviso">sem rosto</span>
@@ -230,3 +241,22 @@
     }
   </div>
 </div>
+
+@if (explicarCamera()) {
+  <div class="consent-fundo" (click)="explicarCamera.set(false)">
+    <div class="consent" role="dialog" aria-modal="true" aria-labelledby="consent-titulo" (click)="$event.stopPropagation()">
+      <h3 id="consent-titulo">Ativar o monitoramento de foco?</h3>
+      <p>A câmera é usada para estimar se você está olhando para a tela e para detectar um celular por perto.</p>
+      <ul>
+        <li>As imagens são processadas só no seu navegador. Nenhuma imagem é gravada ou enviada ao servidor.</li>
+        <li>Ficam salvos apenas números: o foco ao longo do tempo e quantas vezes um celular apareceu. Eles alimentam o seu Painel.</li>
+        <li>Nos primeiros segundos, olhe para a tela para a calibração.</li>
+        <li>Você pode desligar a qualquer momento no ✕ da câmera.</li>
+      </ul>
+      <div class="consent-acoes">
+        <button class="btn btn-ghost" (click)="explicarCamera.set(false)">Agora não</button>
+        <button class="btn btn-accent" (click)="confirmarCamera()">Ativar câmera</button>
+      </div>
+    </div>
+  </div>
+}

@@ -83,6 +83,53 @@ def extrair_texto(conteudo: bytes) -> str:
     return "\n".join(pagina.extract_text() or "" for pagina in leitor.pages)
 
 
+# ---------- Limpeza de layout (boilerplate) e páginas que são só imagem ----------
+
+_SO_NUMEROS = re.compile(r"^[\d\s./:|()–-]+$")  # "1   2", "12", "09/11/2026", "3 / 20"
+_PAGINA_X_DE_Y = re.compile(r"^(?:p[áa]g(?:ina)?\.?\s*)?\d+\s*(?:de|of|/)\s*\d+$", re.I)
+_SO_URL = re.compile(r"^(?:https?://|www\.)\S+$", re.I)
+
+
+def contar_palavras(texto: str) -> int:
+    return len(re.findall(r"[A-Za-zÀ-ÿ]{2,}", texto or ""))
+
+
+def _linha_de_layout(linha: str) -> bool:
+    s = linha.strip()
+    return bool(_SO_NUMEROS.match(s) or _PAGINA_X_DE_Y.match(s) or _SO_URL.match(s))
+
+
+def remover_cabecalhos_rodapes(paginas: list[str]) -> list[str]:
+    """Tira de cada página o que é layout e não conteúdo: linhas curtas repetidas em
+    pelo menos metade das páginas (cabeçalho/rodapé, ex.: a data de impressão de um
+    handout), numeração de páginas/slides, datas soltas e URLs isoladas."""
+    divididas = [(p or "").replace("\r", "\n").split("\n") for p in paginas]
+    chave = lambda s: re.sub(r"\s+", " ", s.strip().lower())  # noqa: E731
+    repetidas: set[str] = set()
+    if len(paginas) >= 3:
+        contagem: Counter = Counter()
+        for linhas in divididas:
+            contagem.update({chave(l) for l in linhas if l.strip() and len(l.strip()) <= 80})
+        repetidas = {k for k, c in contagem.items() if c >= max(3, len(paginas) / 2)}
+    return [
+        "\n".join(l for l in linhas if l.strip() and chave(l) not in repetidas and not _linha_de_layout(l))
+        for linhas in divididas
+    ]
+
+
+def tem_imagem(pagina) -> bool:
+    """A página (pypdf) desenha alguma imagem? Na dúvida, responde que sim."""
+    try:
+        recursos = pagina.get("/Resources")
+        xobjs = recursos.get_object().get("/XObject") if recursos else None
+        if not xobjs:
+            return False
+        xobjs = xobjs.get_object()
+        return any(xobjs[k].get_object().get("/Subtype") in ("/Image", "/Form") for k in xobjs)
+    except Exception:
+        return True
+
+
 # ---------- PDF original e localização da página de origem ----------
 
 _cache_paginas: dict[int, list[str]] = {}
@@ -98,12 +145,28 @@ def salvar_pdf(material_id: int, conteudo: bytes) -> None:
         f.write(conteudo)
 
 
+def _caminho_paginas(material_id: int) -> str:
+    return os.path.join(config.UPLOADS_DIR, f"{material_id}.paginas.json")
+
+
+def salvar_paginas(material_id: int, paginas: list[str]) -> None:
+    """Guarda o texto final de cada página (inclusive o transcrito por visão), para
+    localizar a página de origem das questões sem depender da camada de texto do PDF."""
+    import json
+
+    os.makedirs(config.UPLOADS_DIR, exist_ok=True)
+    with open(_caminho_paginas(material_id), "w", encoding="utf-8") as f:
+        json.dump(paginas, f, ensure_ascii=False)
+    _cache_paginas.pop(material_id, None)
+
+
 def remover_pdf(material_id: int) -> None:
     _cache_paginas.pop(material_id, None)
-    try:
-        os.remove(caminho_pdf(material_id))
-    except FileNotFoundError:
-        pass
+    for caminho in (caminho_pdf(material_id), _caminho_paginas(material_id)):
+        try:
+            os.remove(caminho)
+        except FileNotFoundError:
+            pass
 
 
 def _compacto(texto: str) -> str:
@@ -112,6 +175,13 @@ def _compacto(texto: str) -> str:
 
 def _paginas(material_id: int) -> list[str]:
     if material_id not in _cache_paginas:
+        salvas = _caminho_paginas(material_id)
+        if os.path.exists(salvas):
+            import json
+
+            with open(salvas, encoding="utf-8") as f:
+                _cache_paginas[material_id] = [_compacto(p) for p in json.load(f)]
+            return _cache_paginas[material_id]
         caminho = caminho_pdf(material_id)
         if not os.path.exists(caminho):
             return []
@@ -207,7 +277,7 @@ def segmentar_topicos(texto: str) -> list[tuple[str, str]]:
 
 def fragmentar(texto: str) -> list[str]:
     divisor = RecursiveCharacterTextSplitter(chunk_size=900, chunk_overlap=120)
-    return [c for c in divisor.split_text(texto) if len(c.strip()) > 80]
+    return [c for c in divisor.split_text(texto) if len(c.strip()) > 80 and contar_palavras(c) >= 15]
 
 
 def indexar(material_id: int, chunks: list[str]) -> None:
@@ -310,6 +380,13 @@ def bons_chunks(chunks: list[str], minimo_texto: float = 0.3) -> list[str]:
     if len(textuais) >= 3:
         return textuais
     return bons or chunks
+
+
+def chunks_avaliaveis(chunks: list[str]) -> list[str]:
+    """Como bons_chunks, mas sem o "plano B" de devolver os trechos ruins quando nada
+    passa nos filtros: é melhor não gerar questão do que gerar sobre data e numeração
+    de slide. (bons_chunks fica como está porque a avaliação do TCC depende dele.)"""
+    return [c for c in bons_chunks(chunks) if not parece_metadados(c) and _chunk_util(c)]
 
 
 def obter_chunks(material_id: int) -> list[str]:

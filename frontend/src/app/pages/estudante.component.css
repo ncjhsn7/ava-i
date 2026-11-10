@@ -121,3 +121,28 @@ h3,.titulo-col{font-family:var(--display);font-size:18px;font-weight:700;letter-
 .meta-aviso{font-weight:700;color:var(--ok);margin-bottom:6px}
 @keyframes pulo{0%{transform:scale(.6);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
 @media (prefers-reduced-motion:reduce){.num.seq,.xp-ganho{animation:none}}
+
+/* código inline vindo do LLM (`assim`) */
+.questao code, .resultado code, .opt code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: .9em; background: rgba(255,255,255,.08);
+  padding: .05em .35em; border-radius: 4px;
+}
+.aviso-celular {
+  margin: 0 0 16px; padding: 10px 14px; border-radius: 10px;
+  background: rgba(255,107,107,.12); border: 1px solid rgba(255,107,107,.45);
+  color: #ff8787; font-weight: 600; font-size: .9rem;
+}
+.fim-gami { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 4px 0 22px; }
+.fim-gami span {
+  padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.06);
+  font-size: .85rem; color: #c9c9d1;
+}
+.fim-gami b { color: #ffd43b; }
+
+.consent-fundo{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:500;padding:16px}
+.consent{background:var(--surface);border-radius:18px;max-width:480px;width:100%;padding:28px}
+.consent h3{font-size:20px;margin-bottom:10px}
+.consent p{color:var(--ink-soft);margin-bottom:12px}
+.consent ul{margin:0 0 22px 18px;color:var(--ink-soft);font-size:14px;display:flex;flex-direction:column;gap:6px}
+.consent-acoes{display:flex;justify-content:flex-end;gap:10px}

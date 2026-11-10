@@ -1,6 +1,7 @@
 """Gamificação do Âncora: XP e níveis, sequência de dias, sequência de acertos,
 meta diária e domínio por PDF. Tudo é calculado a partir das respostas salvas."""
-from collections import defaultdict
+import unicodedata
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
@@ -86,12 +87,30 @@ def respondidas_no_dia(db: Session, dia: date) -> int:
     )
 
 
+def chave_area(nome: str) -> str:
+    """"Inteligência Artificial" e "inteligencia artificial" são a mesma área."""
+    sem_acento = unicodedata.normalize("NFD", nome or "").encode("ascii", "ignore").decode()
+    return " ".join(sem_acento.lower().split())
+
+
+def _nomes_canonicos(nomes: list[str]) -> dict[str, str]:
+    """Para cada área, a grafia a exibir: a acentuada, se houver; senão a mais usada."""
+    grupos: dict[str, Counter] = defaultdict(Counter)
+    for n in nomes:
+        grupos[chave_area(n)][n] += 1
+    return {
+        chave: max(c, key=lambda n: (sum(1 for ch in n if ord(ch) > 127), c[n]))
+        for chave, c in grupos.items()
+    }
+
+
 def calcular(db: Session) -> dict:
     sessoes = {s.id: s for s in db.query(models.Sessao).all()}
     respostas = db.query(models.Resposta).order_by(models.Resposta.id).all()
     material_da_questao = dict(db.query(models.Questao.id, models.Questao.material_id).all())
     materiais = db.query(models.Material).order_by(models.Material.cadeira_id, models.Material.id).all()
-    area_do_material = {m.id: (m.area or "Sem área") for m in materiais}
+    canonico = _nomes_canonicos([m.area for m in materiais if m.area])
+    area_do_material = {m.id: canonico.get(chave_area(m.area), m.area) if m.area else "Sem área" for m in materiais}
     meta = obter_meta(db)
 
     xp = 0
@@ -140,7 +159,7 @@ def calcular(db: Session) -> dict:
         else:
             status = "Em progresso"
         dominio.append({"material_id": m.id, "titulo": m.titulo, "cadeira_id": m.cadeira_id,
-                        "area": m.area or "", "pct": pct, "respostas": n, "status": status})
+                        "area": area_do_material[m.id] if m.area else "", "pct": pct, "respostas": n, "status": status})
 
     areas = sorted(
         ({"area": nome, "xp": v["xp"], "respostas": v["respostas"],

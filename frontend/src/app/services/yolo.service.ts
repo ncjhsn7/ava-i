@@ -12,6 +12,8 @@ export class YoloService {
   disponivel = signal(false);
   eventos = signal(0);
   celularVisivel = signal(false);
+  /** Aviso confirmado: celular em 2+ quadros seguidos (evita alarme por um quadro só). */
+  alertaCelular = signal(false);
   confianca = signal(0);
   erro = signal<string | null>(null);
 
@@ -56,6 +58,7 @@ export class YoloService {
     this.rodando = false;
     this.disponivel.set(false);
     this.celularVisivel.set(false);
+    this.alertaCelular.set(false);
   }
 
   private agendar() {
@@ -99,9 +102,11 @@ export class YoloService {
         this.eventos.update(n => n + 1);
         this.emEvento = true;
       }
+      if (this.consecutivos >= QUADROS_CONSECUTIVOS) this.alertaCelular.set(true);
     } else {
       this.consecutivos = 0;
       this.emEvento = false;
+      this.alertaCelular.set(false);
     }
   }
 }

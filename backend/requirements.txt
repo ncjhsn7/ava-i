@@ -7,3 +7,5 @@ chromadb
 anthropic
 python-multipart
 python-dotenv
+pypdfium2
+pillow

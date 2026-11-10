@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import os
 from sqlalchemy.orm import Session
-from . import models, schemas, rag, llm, config, gamificacao
+from fastapi.concurrency import run_in_threadpool
+from . import models, schemas, rag, llm, config, gamificacao, ingestao
 from sqlalchemy import inspect, text
 import threading
 from .database import Base, SessionLocal, engine, get_db
@@ -31,10 +32,19 @@ def _areas_existentes(db: Session) -> list[str]:
 
 def _classificar_material(db: Session, material: models.Material, conteudo: str) -> bool:
     """Preenche a área do material via LLM; se falhar, deixa vazia para tentar depois."""
-    if not llm.disponivel():
+    area = ""
+    if llm.disponivel():
+        try:
+            area = llm.classificar_area(material.titulo, conteudo, _areas_existentes(db))
+        except Exception as e:
+            llm._registrar_falha(f"classificação de área falhou (material {material.id})", f"{type(e).__name__}: {e}")
+    if not area:
+        # Sem LLM (ou cota esgotada): usa o nome da cadeira, que o estudante pode editar em Materiais.
+        area = material.cadeira.nome if material.cadeira else ""
+    if not area:
         return False
     try:
-        material.area = llm.classificar_area(material.titulo, conteudo, _areas_existentes(db))
+        material.area = area
         db.commit()
         return True
     except Exception:
@@ -113,17 +123,17 @@ async def criar_material(
     if not cadeira:
         raise HTTPException(404, "Cadeira não encontrada")
     conteudo = await arquivo.read()
-    texto = rag.extrair_texto(conteudo)
-    limpo = rag.limpar_texto(texto)
-    chunks = rag.fragmentar(limpo)
+    # Pode chamar o LLM de visão para páginas que são só imagem: roda fora do event loop.
+    paginas, chunks, _ = await run_in_threadpool(ingestao.processar_pdf, conteudo)
     if not chunks:
-        raise HTTPException(422, "Não foi possível extrair conteúdo do PDF")
+        raise HTTPException(422, ingestao.mensagem_sem_conteudo())
     material = models.Material(cadeira_id=cadeira_id, titulo=titulo, status="pronto")
     db.add(material)
     db.commit()
     db.refresh(material)
     rag.indexar(material.id, chunks)
     rag.salvar_pdf(material.id, conteudo)
+    rag.salvar_paginas(material.id, paginas)
     # A área é classificada em segundo plano para o envio não ficar esperando o LLM.
     if llm.disponivel():
         threading.Thread(target=_classificar_pendentes, daemon=True).start()
@@ -171,11 +181,32 @@ def remover_material(material_id: int, db: Session = Depends(get_db)):
     return {"removido": True}
 
 
+@app.post("/materiais/{material_id}/reprocessar", response_model=schemas.MaterialOut)
+def reprocessar_material(material_id: int, db: Session = Depends(get_db)):
+    """Refaz a extração e o índice de um PDF já enviado (ex.: PDF de imagens enviado
+    antes da leitura por visão), sem perder o histórico de questões e respostas."""
+    material = db.get(models.Material, material_id)
+    if not material:
+        raise HTTPException(404, "Material não encontrado")
+    caminho = rag.caminho_pdf(material_id)
+    if not os.path.exists(caminho):
+        raise HTTPException(404, "O PDF original não está salvo; envie o arquivo de novo")
+    with open(caminho, "rb") as f:
+        conteudo = f.read()
+    paginas, chunks, _ = ingestao.processar_pdf(conteudo)
+    if not chunks:
+        raise HTTPException(422, ingestao.mensagem_sem_conteudo())
+    rag.remover_indice(material_id)
+    rag.indexar(material_id, chunks)
+    rag.salvar_paginas(material_id, paginas)
+    return material
+
+
 @app.post("/materiais/{material_id}/preview", response_model=schemas.PerguntaOut)
 def preview_material(material_id: int, db: Session = Depends(get_db)):
     if not llm.disponivel():
         raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar questões")
-    chunks = rag.bons_chunks(rag.obter_chunks(material_id))
+    chunks = rag.chunks_avaliaveis(rag.obter_chunks(material_id))
     if not chunks:
         raise HTTPException(422, "Material sem conteúdo indexado; reenvie o PDF")
     try:
@@ -215,7 +246,7 @@ def proxima_questao(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depe
         raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar questões")
     candidatos = []
     for mid in dados.material_ids:
-        for chunk in rag.bons_chunks(rag.obter_chunks(mid)):
+        for chunk in rag.chunks_avaliaveis(rag.obter_chunks(mid)):
             candidatos.append((mid, chunk))
     if not candidatos:
         raise HTTPException(422, "Sem conteúdo para gerar questões")
@@ -253,7 +284,7 @@ def lote_questoes(sessao_id: int, dados: schemas.ProximaIn, db: Session = Depend
         raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar questões")
     candidatos = []
     for mid in dados.material_ids:
-        for chunk in rag.bons_chunks(rag.obter_chunks(mid)):
+        for chunk in rag.chunks_avaliaveis(rag.obter_chunks(mid)):
             candidatos.append((mid, chunk))
     if not candidatos:
         raise HTTPException(422, "Sem conteúdo para gerar questões")
@@ -308,7 +339,7 @@ def gerar_estudo(cadeira_id: int, dados: schemas.EstudoIn, db: Session = Depends
         raise HTTPException(503, "Configure um LLM (ex.: Gemini) no .env para gerar o material de estudo")
     partes = []
     for mid in dados.material_ids:
-        partes.extend(rag.bons_chunks(rag.obter_chunks(mid)))
+        partes.extend(rag.chunks_avaliaveis(rag.obter_chunks(mid)))
     if not partes:
         raise HTTPException(422, "Sem conteúdo nos PDFs selecionados")
     conteudo = "\n\n".join(partes)
@@ -370,10 +401,10 @@ def _classificar_pendentes() -> None:
         for material in sem_area:
             try:
                 conteudo = "\n".join(rag.obter_chunks(material.id)[:6])
-            except Exception:
-                continue
-            if conteudo and not _classificar_material(db, material, conteudo):
-                break  # provavelmente limite do Gemini: tenta de novo numa próxima vez
+            except Exception as e:
+                llm._registrar_falha(f"chunks indisponíveis para classificar (material {material.id})", repr(e))
+                conteudo = ""
+            _classificar_material(db, material, conteudo or material.titulo)
     finally:
         db.close()
         _classificando.release()

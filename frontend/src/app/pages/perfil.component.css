@@ -1,0 +1,47 @@
+/* ---------- perfil: gamificação e domínio ---------- */
+.gami{display:grid;grid-template-columns:1.3fr 1fr 1.2fr;gap:14px;margin-bottom:18px}
+.g-card{background:var(--surface);border:1px solid var(--linha);border-radius:var(--r-lg);padding:18px;display:flex;flex-direction:column;gap:8px}
+.g-card small{color:var(--ink-soft);font-size:12.5px}
+.g-card strong{font-weight:700}
+.g-topo{display:flex;align-items:center;gap:12px}
+.g-topo div{display:flex;flex-direction:column}
+.g-selo{font-family:var(--display);font-weight:800;font-size:18px;background:var(--accent);color:var(--accent-ink);border-radius:12px;padding:8px 10px;line-height:1}
+.g-barra{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden;margin-top:4px}
+.g-barra span{display:block;height:100%;background:var(--accent);border-radius:999px;transition:width .4s}
+.g-grande{font-family:var(--display);font-size:34px;font-weight:800;line-height:1}
+.g-streak.apagado .g-grande{filter:grayscale(1);opacity:.6}
+.g-meta{flex-direction:row;align-items:center;gap:14px}
+.g-meta > div{display:flex;flex-direction:column;gap:4px}
+.g-anel{width:64px;height:64px;flex-shrink:0;transform:rotate(-90deg)}
+.g-anel circle{fill:none;stroke-width:7}
+.g-anel .trilho{stroke:var(--surface-3)}
+.g-anel .valor{stroke:var(--accent);stroke-linecap:round;transition:stroke-dashoffset .4s}
+.g-meta.batida .g-anel .valor{stroke:var(--ok)}
+.g-sel{font-size:12.5px;color:var(--ink-soft);display:flex;align-items:center;gap:6px}
+.g-sel select{background:var(--surface-2);color:var(--ink);border:1px solid var(--linha);border-radius:6px;padding:2px 6px;font:inherit}
+.painel-bloco{background:var(--surface);border:1px solid var(--linha);border-radius:var(--r-lg);padding:18px;margin-bottom:18px}
+.painel-bloco h3{font-family:var(--display);font-size:18px;font-weight:700;margin-bottom:12px}
+.dominio ul{list-style:none;display:grid;gap:10px;margin:0;padding:0}
+.dominio li{display:grid;grid-template-columns:minmax(0,1.4fr) 2fr 84px 104px;align-items:center;gap:12px}
+.d-info{display:flex;flex-direction:column;min-width:0}
+.d-titulo{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.d-cadeira{font-size:12px;color:var(--ink-faint)}
+.d-barra{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden}
+.d-barra span{display:block;height:100%;border-radius:999px;background:var(--aviso);transition:width .4s}
+.d-barra span[data-status="Dominado"]{background:var(--ok)}
+.d-barra span[data-status="Começando"]{background:var(--ink-faint)}
+.d-pct{font-weight:700;text-align:right;font-variant-numeric:tabular-nums;display:flex;flex-direction:column;line-height:1.2}
+.d-pct small{font-size:11px;font-weight:500;color:var(--ink-faint)}
+.d-status{font-size:12px;font-weight:700;text-align:center;padding:3px 8px;border-radius:999px;background:var(--aviso-soft);color:var(--aviso)}
+.d-status[data-status="Dominado"]{background:var(--ok-soft);color:var(--ok)}
+.d-status[data-status="Novo"],.d-status[data-status="Começando"]{background:var(--surface-3);color:var(--ink-soft)}
+.d-nota{font-size:12px;color:var(--ink-faint);margin-top:12px}
+@media (max-width:900px){.gami{grid-template-columns:1fr}}
+@media (max-width:600px){.dominio li{grid-template-columns:1fr 84px;row-gap:6px}.d-barra{grid-column:1/-1;grid-row:2}.d-status{display:none}}
+.g-area{margin-top:2px}
+.g-area b{color:var(--ink)}
+.areas{display:flex;flex-wrap:wrap;gap:8px}
+.area-chip{font-size:13px;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--linha);border-radius:999px;padding:5px 12px}
+.area-chip b{color:var(--ink);margin-right:4px}
+.vazio{color:var(--ink-soft)}
+.vazio a{color:var(--accent);font-weight:600}

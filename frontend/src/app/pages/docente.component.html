@@ -88,10 +88,10 @@
               </div>
               @if (preview() && previewId() === m.id) {
                 <div class="preview">
-                  <p class="pv-pergunta">{{ preview()!.pergunta }}</p>
+                  <p class="pv-pergunta" [innerHTML]="preview()!.pergunta | codigo"></p>
                   <ol>
                     @for (op of preview()!.opcoes; track $index) {
-                      <li [class.certa]="$index === preview()!.correta"><span>{{ 'abcdefgh'[$index] }}</span>{{ op }}</li>
+                      <li [class.certa]="$index === preview()!.correta"><span>{{ 'abcdefgh'[$index] }}</span><span [innerHTML]="op | codigo"></span></li>
                     }
                   </ol>
                   <div class="pv-fonte"><b>Trecho do PDF</b>{{ preview()!.fonte }}</div>

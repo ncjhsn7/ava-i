@@ -212,18 +212,32 @@ def disponivel() -> bool:
     return False
 
 
+def _partes_gemini(prompt: str, imagem: tuple[bytes, str] | None) -> list[dict]:
+    if not imagem:
+        return [{"text": prompt}]
+    import base64
+
+    dados, mime = imagem
+    return [{"inline_data": {"mime_type": mime, "data": base64.b64encode(dados).decode("ascii")}}, {"text": prompt}]
+
+
 class LimiteLLM(RuntimeError):
     """Cota do provedor esgotada: não adianta insistir agora."""
 
 
+class LimiteDiarioLLM(LimiteLLM):
+    """Cota diária esgotada: só renova no dia seguinte."""
+
+
 def _gemini(prompt: str, max_tokens: int, json_mode: bool = True, schema: dict | None = None,
-            modelo: str | None = None, esperar_limite: bool = True) -> str:
+            modelo: str | None = None, esperar_limite: bool = True,
+            imagem: tuple[bytes, str] | None = None, temperatura: float = 0.8) -> str:
     import urllib.request
     import urllib.error
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo or config.GEMINI_MODEL}:generateContent"
     gen = {
-        "temperature": 0.8,
+        "temperature": temperatura,
         "maxOutputTokens": max(max_tokens, 2048),
         "thinkingConfig": {"thinkingBudget": 0},
     }
@@ -232,7 +246,7 @@ def _gemini(prompt: str, max_tokens: int, json_mode: bool = True, schema: dict |
         if schema:
             gen["responseSchema"] = schema
     corpo = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": _partes_gemini(prompt, imagem)}],
         "generationConfig": gen,
     }).encode("utf-8")
     req = urllib.request.Request(
@@ -258,7 +272,7 @@ def _gemini(prompt: str, max_tokens: int, json_mode: bool = True, schema: dict |
                 _registrar_falha(f"429 do Gemini ({nome_modelo})", detalhe)
                 if "PerDay" in detalhe:
                     # Cota DIÁRIA: esperar segundos não resolve, falha na hora.
-                    raise LimiteLLM(
+                    raise LimiteDiarioLLM(
                         f"a cota diária gratuita do Gemini ({nome_modelo}) acabou; ela renova amanhã. "
                         "Para continuar hoje, troque GEMINI_MODEL no .env (ex.: gemini-2.5-flash-lite) e reinicie o backend."
                     ) from None
@@ -315,6 +329,46 @@ Use TEXTO SIMPLES (sem markdown, sem asteriscos, sem #): cada título numa linha
 
 CONTEÚDO:
 {conteudo}"""
+
+
+PROMPT_VISAO = """Esta imagem é uma página de um material didático em PDF; ela pode conter um ou vários slides.
+Transcreva o CONTEÚDO da página em português, em texto simples, para servir de base a questões de estudo:
+- Para cada slide ou bloco, escreva o título numa linha e os tópicos em linhas começando com "• ", na ordem de leitura.
+- Se uma figura, ilustração, gráfico ou tabela transmitir informação (um exemplo, uma situação, dados), descreva-a em uma frase começando com "Figura: ". Ignore imagens só decorativas.
+- IGNORE elementos de layout: datas, numeração de slides e páginas, cabeçalhos e rodapés, logotipos, nomes de instituição, créditos e marcas d'água.
+- Não invente, não complete e não explique nada que não esteja na imagem. Não use markdown.
+- Se a página não tiver conteúdo didático (em branco ou só decoração), responda apenas: SEM_CONTEUDO"""
+
+
+def transcrever_pagina(imagem: bytes, mime: str = "image/jpeg") -> str:
+    """Transcreve com um LLM multimodal uma página que só tem imagem (slides exportados
+    como figura, handouts, digitalizações). Devolve "" se não houver conteúdo."""
+    if config.LLM_PROVIDER == "anthropic" and config.ANTHROPIC_API_KEY:
+        import anthropic
+        import base64
+
+        cliente = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        msg = cliente.messages.create(
+            model=config.LLM_MODEL,
+            max_tokens=2048,
+            temperature=0,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": mime,
+                                             "data": base64.b64encode(imagem).decode("ascii")}},
+                {"type": "text", "text": PROMPT_VISAO},
+            ]}],
+        )
+        texto = msg.content[0].text
+    elif config.LLM_PROVIDER == "gemini" and config.GEMINI_API_KEY:
+        texto = _gemini(PROMPT_VISAO, 2048, json_mode=False, modelo=config.GEMINI_MODEL_VISAO,
+                        imagem=(imagem, mime), temperatura=0.1)
+    else:
+        raise RuntimeError("Nenhum LLM configurado")
+    texto = (texto or "").strip()
+    if texto.startswith("SEM_CONTEUDO"):
+        return ""
+    texto = re.sub(r"\*\*|__|^#+\s*", "", texto, flags=re.M)  # caso venha markdown mesmo assim
+    return re.sub(r"^\s*[*-]\s+", "• ", texto, flags=re.M)
 
 
 def gerar_material_estudo(conteudo: str, nivel: str, objetivo: str, tempo: str) -> str:
@@ -451,6 +505,14 @@ _ENUNCIADO_PROIBIDO = re.compile(
     r"objetivo principal|prop[óo]sito principal)\b",
     re.I,
 )
+# Perguntas sobre o layout do PDF ou sobre a própria tarefa (datas de impressão,
+# numeração de slides, "trechos do material"): descartadas.
+_ENUNCIADO_LAYOUT = re.compile(
+    r"\b(?:qual (?:é |e )?(?:a )?data|(?:qual|quais) das datas|datas? (?:indicad|que aparec|no in[íi]cio)|"
+    r"numera[çc][ãa]o d[eo]s? (?:slides?|p[áa]ginas?)|n[úu]mero d[oe]s? (?:slides?|p[áa]ginas?|trechos?)|"
+    r"trechos? do material|cabe[çc]alhos?|rodap[ée]s?|criar quest[õo]es)\b",
+    re.I,
+)
 # Muletas que remetem ao documento: removidas do enunciado (a questão continua valendo).
 _MULETAS = re.compile(
     r",?\s*(?:de acordo com|segundo|conforme(?: indicado| descrito| apresentado)?(?: n)?)\s*"
@@ -473,7 +535,7 @@ def _questao_valida(q: dict, chunk: str) -> dict:
     if q.get("pular"):
         raise TrechoSemConteudo("trecho sem conteúdo avaliável")
     q["pergunta"] = _limpar_enunciado(q.get("pergunta", ""))
-    if _ENUNCIADO_PROIBIDO.search(q["pergunta"]):
+    if _ENUNCIADO_PROIBIDO.search(q["pergunta"]) or _ENUNCIADO_LAYOUT.search(q["pergunta"]):
         _registrar_falha("enunciado sobre metadados descartado", q.get("pergunta", ""))
         raise TrechoSemConteudo("enunciado sobre metadados")
     if not q.get("pergunta") or not q.get("opcoes") or len(q["opcoes"]) < 2:
@@ -557,8 +619,10 @@ def classificar_area(titulo: str, conteudo: str, existentes: list[str]) -> str:
     area = re.sub(r"\s+", " ", str(_json_llm(prompt, 200, SCHEMA_AREA, tentativas=1, leve=True).get("area", ""))).strip(" .\"'")[:60]
     if not area:
         raise ValueError("o modelo não retornou uma área")
-    for e in existentes:  # reaproveita a grafia de uma área já existente
-        if e.lower() == area.lower():
+    from .gamificacao import chave_area
+
+    for e in existentes:  # reaproveita a grafia de uma área já existente (ignora acento e maiúsculas)
+        if chave_area(e) == chave_area(area):
             return e
     return area
 

@@ -1,26 +1,45 @@
 # ---------- Segredos ----------
 .env
+.env.*
 **/.env
+**/.env.*
 !**/.env.example
 
-# ---------- Backend (Python) ----------
-backend/venv/
+# ---------- Python (backend e avaliacao) ----------
+venv/
+.venv/
+**/venv/
+**/.venv/
 **/__pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Dados locais gerados pelo app
-backend/ava.db
+# ---------- Dados locais gerados pelo app ----------
+backend/*.db
 backend/*.db-journal
 backend/chroma_data/
 backend/uploads/
 backend/logs/
+*.log
 
-# ---------- Frontend (Angular) ----------
-# (o frontend/.gitignore do Angular já cobre o resto)
-frontend/node_modules/
+# ---------- Avaliação (LLM-as-a-judge) ----------
+avaliacao/logs/
+avaliacao/tmp/
+# Os .jsonl de avaliacao/dados/ contêm trechos dos PDFs das disciplinas
+# (material protegido por direitos autorais). Se o repositório for público,
+# descomente a linha abaixo:
+# avaliacao/dados/
+
+# ---------- Frontend (Angular / Node) ----------
+node_modules/
 frontend/.angular/
 frontend/dist/
+frontend/out-tsc/
+npm-debug.log*
+yarn-error.log*
+.npm/
 
 # ---------- LaTeX (pasta tcc/) ----------
 tcc/**/*.aux
@@ -34,6 +53,12 @@ tcc/**/*.toc
 tcc/**/*.lof
 tcc/**/*.lot
 tcc/**/*.synctex.gz
+
+# ---------- Rascunhos e arquivos de ferramentas ----------
+Claude outputs/
+.claude/
+*.tmp
+~$*
 
 # ---------- Sistema / editores ----------
 .DS_Store

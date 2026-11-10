@@ -1,5 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { FaceLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import { YoloService } from './yolo.service';
 
 const OLHO_DIREITO = [33, 160, 158, 133, 153, 144];
 const OLHO_ESQUERDO = [362, 385, 387, 263, 373, 380];
@@ -35,6 +36,7 @@ export class VisionService {
   calibrado = signal(false);
   erro = signal<string | null>(null);
 
+  private yolo = inject(YoloService);
   private landmarker?: FaceLandmarker;
   private stream?: MediaStream;
   private video?: HTMLVideoElement;
@@ -125,7 +127,11 @@ export class VisionService {
       this.olhandoTela.set(false);
     }
     let ok: boolean;
-    if (okRaw) {
+    if (this.yolo.alertaCelular()) {
+      // Celular confirmado pelo detector (2+ quadros): conta como distração na hora,
+      // sem período de graça, pois a confirmação já leva ~2,5 s.
+      ok = false;
+    } else if (okRaw) {
       this.inicioDistracao = 0;
       ok = true;
     } else {

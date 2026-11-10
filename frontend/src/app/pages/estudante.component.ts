@@ -4,10 +4,11 @@ import { corCadeira, inicial } from '../cores';
 import { ApiService, Cadeira, Material, Questao, TelemetriaItem } from '../services/api.service';
 import { VisionService } from '../services/vision.service';
 import { YoloService } from '../services/yolo.service';
+import { CodigoPipe } from '../codigo.pipe';
 
 @Component({
   selector: 'app-estudante',
-  imports: [RouterLink],
+  imports: [RouterLink, CodigoPipe],
   templateUrl: './estudante.component.html',
   styleUrl: './estudante.component.css'
 })
@@ -35,12 +36,15 @@ export class EstudanteComponent implements OnInit, OnDestroy {
   explicacaoEscolhida = signal('');
   sequencia = signal(0);
   xpGanho = signal(0);
+  xpSessao = signal(0);
+  melhorSequencia = signal(0);
   metaBatida = signal(false);
   respondidasHoje = signal(0);
   metaDiaria = signal(10);
   respondidas = signal(0);
   acertos = signal(0);
   monitorando = signal(false);
+  explicarCamera = signal(false);
   modoRevisao = signal(false);
 
   nivel = signal('Intermediário');
@@ -51,7 +55,9 @@ export class EstudanteComponent implements OnInit, OnDestroy {
 
   cadeiraNome = computed(() => this.cadeiras().find(c => c.id === this.cadeiraId())?.nome ?? '');
   pct = computed(() => this.respondidas() ? Math.round(100 * this.acertos() / this.respondidas()) : 0);
-  focoExibido = computed<number | null>(() => (this.vision.ativo() ? this.vision.foco() : null));
+  // O foco só é medido durante o estudo/questionário; fora disso não exibe número.
+  focoExibido = computed<number | null>(() =>
+    this.vision.ativo() && (this.fase() === 'quiz' || this.fase() === 'estudo') ? this.vision.foco() : null);
   corFoco = computed(() => {
     const v = this.focoExibido();
     if (v === null) return '#2e2e35';
@@ -152,6 +158,7 @@ export class EstudanteComponent implements OnInit, OnDestroy {
       this.api.encerrarSessao(this.sessaoId).subscribe();
       this.sessaoId = null;
     }
+    if (this.monitorando()) this.desativarMonitor();
     this.fase.set('prefs');
   }
 
@@ -162,6 +169,8 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.erro.set('');
     this.respondidas.set(0);
     this.sequencia.set(0);
+    this.xpSessao.set(0);
+    this.melhorSequencia.set(0);
     this.acertos.set(0);
     this.fila = [];
     this.modoRevisao.set(false);
@@ -196,6 +205,8 @@ export class EstudanteComponent implements OnInit, OnDestroy {
             this.fila = qs;
             this.respondidas.set(0);
             this.sequencia.set(0);
+            this.xpSessao.set(0);
+            this.melhorSequencia.set(0);
             this.acertos.set(0);
             this.fase.set('quiz');
             this.timer = setInterval(() => this.tick(), 1000);
@@ -264,6 +275,8 @@ export class EstudanteComponent implements OnInit, OnDestroy {
       this.explicacaoEscolhida.set(r.explicacao_escolhida || '');
       this.sequencia.set(r.sequencia ?? 0);
       this.xpGanho.set(r.xp_ganho ?? 0);
+      this.xpSessao.update(x => x + (r.xp_ganho ?? 0));
+      this.melhorSequencia.update(m => Math.max(m, r.sequencia ?? 0));
       this.metaBatida.set(!!r.meta_batida);
       if (r.respondidas_hoje !== undefined) this.respondidasHoje.set(r.respondidas_hoje);
       this.respondidas.update(n => n + 1);
@@ -303,6 +316,8 @@ export class EstudanteComponent implements OnInit, OnDestroy {
       this.api.encerrarSessao(this.sessaoId).subscribe();
     }
     if (this.timer) clearInterval(this.timer);
+    // O monitoramento vale só durante a sessão: encerrou, desliga a câmera.
+    if (this.monitorando()) this.desativarMonitor();
     this.fase.set('fim');
   }
 
@@ -315,7 +330,17 @@ export class EstudanteComponent implements OnInit, OnDestroy {
     this.modoRevisao.set(false);
   }
 
-  async ativarCamera() {
+  /** Antes de ligar a câmera, explica o que é medido e pede a confirmação do estudante. */
+  ativarCamera() {
+    this.explicarCamera.set(true);
+  }
+
+  confirmarCamera() {
+    this.explicarCamera.set(false);
+    this.iniciarCamera();
+  }
+
+  private async iniciarCamera() {
     if (!this.cam) return;
     const ok = await this.vision.iniciar(this.cam.nativeElement);
     if (ok) {

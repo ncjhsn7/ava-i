@@ -1,0 +1,93 @@
+<div class="view">
+  <div class="cabecalho">
+    <h2>Seu progresso</h2>
+    <p>Nível, sequência de estudo e quanto você já domina de cada PDF.</p>
+  </div>
+
+  @if (erroApi()) {
+    <p class="erro">Não foi possível falar com o servidor. Verifique se o backend está rodando na porta 8000.</p>
+  }
+
+  @if (prog(); as p) {
+    <section class="gami">
+      <div class="g-card g-nivel">
+        <div class="g-topo">
+          <span class="g-selo">Nv {{ p.nivel }}</span>
+          <div>
+            <strong>{{ p.titulo }}</strong>
+            <small>{{ p.xp }} XP no total</small>
+          </div>
+        </div>
+        <div class="g-barra" role="progressbar" aria-label="Progresso para o próximo nível" [attr.aria-valuenow]="pctNivel()" aria-valuemin="0" aria-valuemax="100">
+          <span [style.width.%]="pctNivel()"></span>
+        </div>
+        <small>Faltam {{ p.xp_proximo_nivel - p.xp }} XP para o nível {{ p.nivel + 1 }}</small>
+        @if (p.area_mais_estudada) {
+          <small class="g-area">Área mais estudada: <b>{{ p.area_mais_estudada }}</b></small>
+        }
+      </div>
+
+      <div class="g-card g-streak" [class.apagado]="!p.estudou_hoje">
+        <span class="g-grande">🔥 {{ p.streak_dias }}</span>
+        <strong>{{ p.streak_dias === 1 ? 'dia seguido' : 'dias seguidos' }}</strong>
+        <small>{{ p.estudou_hoje ? 'Você já estudou hoje.' : (p.streak_dias ? 'Estude hoje para não perder a sequência.' : 'Comece sua sequência hoje.') }}</small>
+      </div>
+
+      <div class="g-card g-meta" [class.batida]="p.respondidas_hoje >= p.meta_diaria">
+        <svg viewBox="0 0 64 64" class="g-anel" aria-hidden="true">
+          <circle cx="32" cy="32" r="26" class="trilho" />
+          <circle cx="32" cy="32" r="26" class="valor"
+            [attr.stroke-dasharray]="circMeta"
+            [attr.stroke-dashoffset]="circMeta * (1 - pctMeta() / 100)" />
+        </svg>
+        <div>
+          <strong>{{ p.respondidas_hoje }}/{{ p.meta_diaria }} questões hoje</strong>
+          <small>{{ p.respondidas_hoje >= p.meta_diaria ? 'Meta batida! +50 XP' : 'Meta diária' }}</small>
+          <label class="g-sel">Meta:
+            <select (change)="mudarMeta($event)">
+              @for (m of metas; track m) {
+                <option [value]="m" [selected]="m === p.meta_diaria">{{ m }}</option>
+              }
+            </select>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    @if (p.areas.length) {
+      <section class="painel-bloco">
+        <h3>XP por área</h3>
+        <div class="areas">
+          @for (a of p.areas; track a.area) {
+            <span class="area-chip"><b>{{ a.area }}</b> {{ a.xp }} XP · {{ a.respostas }} {{ a.respostas === 1 ? 'questão' : 'questões' }}@if (a.acerto !== null) { · {{ a.acerto }}% de acerto }</span>
+          }
+        </div>
+      </section>
+    }
+
+    @if (p.dominio.length) {
+      <section class="painel-bloco dominio">
+        <h3>Domínio por PDF</h3>
+        <ul>
+          @for (d of p.dominio; track d.material_id) {
+            <li>
+              <div class="d-info">
+                <span class="d-titulo" [title]="d.titulo">{{ d.titulo }}</span>
+                <span class="d-cadeira">{{ nomeCadeira(d.cadeira_id) }}@if (d.area && !mesmoNome(d.area, nomeCadeira(d.cadeira_id))) { · {{ d.area }} }</span>
+              </div>
+              <div class="d-barra"><span [style.width.%]="d.pct ?? 0" [attr.data-status]="d.status"></span></div>
+              <span class="d-pct">
+                {{ d.pct === null ? '—' : d.pct + '%' }}
+                @if (d.respostas) { <small>{{ d.respostas }} {{ d.respostas === 1 ? 'resposta' : 'respostas' }}</small> }
+              </span>
+              <span class="d-status" [attr.data-status]="d.status">{{ d.status }}</span>
+            </li>
+          }
+        </ul>
+        <p class="d-nota">Calculado sobre as últimas 20 respostas de cada PDF. "Dominado" = 80% ou mais, com pelo menos 10 respostas.</p>
+      </section>
+    } @else {
+      <p class="vazio">Envie PDFs em <a routerLink="/materiais">Materiais</a> e responda questões para acompanhar seu domínio de cada um.</p>
+    }
+  }
+</div>

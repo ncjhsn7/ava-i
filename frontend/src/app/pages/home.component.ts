@@ -23,29 +23,14 @@ export class HomeComponent implements OnInit {
   inicial = inicial;
 
   prog = signal<Progresso | null>(null);
-  metas = [5, 10, 15, 20, 30];
   pctNivel = computed(() => {
     const p = this.prog();
     if (!p) return 0;
     return Math.round(100 * (p.xp - p.xp_nivel_inicio) / (p.xp_proximo_nivel - p.xp_nivel_inicio));
   });
-  pctMeta = computed(() => {
-    const p = this.prog();
-    return p ? Math.min(100, Math.round(100 * p.respondidas_hoje / p.meta_diaria)) : 0;
-  });
-  circMeta = 2 * Math.PI * 26;
 
   carregarProgresso() {
     this.api.progresso().subscribe({ next: p => this.prog.set(p), error: () => {} });
-  }
-
-  mudarMeta(ev: Event) {
-    const meta = Number((ev.target as HTMLSelectElement).value);
-    this.api.definirMeta(meta).subscribe(() => this.carregarProgresso());
-  }
-
-  nomeCadeira(id: number) {
-    return this.cadeiras().find(c => c.id === id)?.nome ?? '';
   }
 
   ngOnInit() {

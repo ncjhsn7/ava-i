@@ -1,9 +1,11 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { corCadeira, inicial } from '../cores';
 import { ApiService, Cadeira, Material, Pergunta } from '../services/api.service';
+import { CodigoPipe } from '../codigo.pipe';
 
 @Component({
   selector: 'app-professor',
+  imports: [CodigoPipe],
   templateUrl: './docente.component.html',
   styleUrl: './docente.component.css'
 })
@@ -144,7 +146,7 @@ export class ProfessorComponent implements OnInit {
   }
 
   removerMaterial(m: Material) {
-    if (!confirm(`Remover o PDF "${m.titulo}"?`)) return;
+    if (!confirm(`Remover o PDF "${m.titulo}"? As questões geradas a partir dele também serão removidas.`)) return;
     this.api.removerMaterial(m.id).subscribe(() => {
       if (this.sel()) this.api.listarMateriais(this.sel()!.id).subscribe(ms => this.materiais.set(ms));
     });
